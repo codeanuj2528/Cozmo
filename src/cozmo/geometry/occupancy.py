@@ -1,0 +1,203 @@
+"""Free space and wall evidence as 2D rasters.
+
+The depth image is reduced to a synthetic 2D range scan per keyframe: points are binned by
+azimuth around the camera and the nearest return in each bin is kept. That turns a
+1.2-million-point fusion problem into ordinary occupancy grid mapping, and it is what makes
+free-space carving affordable. Without carving, an unobserved region and an open region
+look identical on the map, and a floor plan built on that distinction alone will happily
+close a wall across a doorway it never looked through.
+
+Two height bands are maintained rather than one.
+
+  * The traversable band, just above the floor, answers "could the camera see through
+    here". It is the free-space evidence and it is where doorways show up.
+  * The structural band, above typical furniture height, answers "is there a wall here".
+    Sofas, beds and counters sit below it, so wall evidence is not dragged inward by a
+    room's contents, which is the single largest bias in naive contour-based floor plans.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+
+from cozmo.geometry.grid import Grid2D
+
+AZIMUTH_BINS = 720
+LOG_ODDS_FREE = -0.22
+LOG_ODDS_OCCUPIED = 0.85
+LOG_ODDS_CLAMP = 8.0
+
+
+@dataclass
+class OccupancyMaps:
+    grid: Grid2D
+    free_log_odds: np.ndarray
+    wall_weight: np.ndarray
+    traversable_hits: np.ndarray
+    camera_track: np.ndarray
+    observed: np.ndarray
+
+    @property
+    def free_mask(self) -> np.ndarray:
+        return self.free_log_odds < -0.5
+
+    @property
+    def occupied_mask(self) -> np.ndarray:
+        return self.free_log_odds > 0.5
+
+
+def _march_rays(
+    grid: Grid2D,
+    origins_rc: np.ndarray,
+    targets_rc: np.ndarray,
+    stop_short_cells: float = 1.0,
+) -> np.ndarray:
+    """Flat indices of cells crossed by each ray, stopping short of the endpoint.
+
+    Sampling along the ray at grid pitch rather than walking a Bresenham line lets the
+    whole batch run as a single vectorised operation. Duplicate cells are harmless: the
+    log-odds update is additive and the result is clamped.
+    """
+    delta = targets_rc - origins_rc
+    lengths = np.linalg.norm(delta, axis=1)
+    usable = lengths > (stop_short_cells + 1.0)
+    if not usable.any():
+        return np.zeros(0, dtype=np.int64)
+
+    origins_rc = origins_rc[usable]
+    delta = delta[usable]
+    lengths = lengths[usable]
+    steps = int(np.ceil(lengths.max())) + 1
+    # Fraction of the way along each ray at which to stop, so the surface itself is not
+    # carved away by the very ray that measured it.
+    stop_fraction = np.clip(1.0 - stop_short_cells / lengths, 0.0, 1.0)
+    t = np.linspace(0.0, 1.0, steps)[None, :] * stop_fraction[:, None]
+
+    rr = origins_rc[:, 0:1] + delta[:, 0:1] * t
+    cc = origins_rc[:, 1:2] + delta[:, 1:2] * t
+    rr = np.round(rr).astype(np.int64).ravel()
+    cc = np.round(cc).astype(np.int64).ravel()
+
+    ok = (rr >= 0) & (rr < grid.shape[0]) & (cc >= 0) & (cc < grid.shape[1])
+    return rr[ok] * grid.shape[1] + cc[ok]
+
+
+def _azimuth_reduce(points_xz: np.ndarray, camera_xz: np.ndarray, bins: int) -> np.ndarray:
+    """Nearest return per azimuth bin around the camera. Returns the selected points."""
+    rel = points_xz - camera_xz
+    ranges = np.linalg.norm(rel, axis=1)
+    good = ranges > 1e-3
+    if not good.any():
+        return np.zeros((0, 2))
+    rel, ranges, points_xz = rel[good], ranges[good], points_xz[good]
+
+    angle = np.arctan2(rel[:, 1], rel[:, 0])
+    idx = ((angle + np.pi) / (2 * np.pi) * bins).astype(np.int64) % bins
+    order = np.lexsort((ranges, idx))
+    idx_sorted = idx[order]
+    first = np.ones(len(idx_sorted), dtype=bool)
+    first[1:] = idx_sorted[1:] != idx_sorted[:-1]
+    return points_xz[order][first]
+
+
+def build_occupancy(
+    cloud,
+    floor_y: float,
+    ceiling_y: float | None,
+    resolution: float = 0.025,
+    traversable_band: tuple[float, float] = (0.25, 1.15),
+    structural_band: tuple[float, float] = (1.45, 2.10),
+    camera_positions: np.ndarray | None = None,
+) -> OccupancyMaps:
+    """Build free-space and wall-evidence rasters from a fused cloud.
+
+    `camera_positions` is an (M, 3) array of keyframe camera centres in the same frame as
+    the cloud. Free-space carving needs a ray origin, and the camera is the only honest one.
+    """
+    points_xz = cloud.points[:, [0, 2]].astype(np.float64)
+    height = cloud.points[:, 1] - floor_y
+
+    all_xz = points_xz
+    if camera_positions is not None and len(camera_positions):
+        all_xz = np.vstack([points_xz, camera_positions[:, [0, 2]]])
+    grid = Grid2D.covering(all_xz, resolution)
+
+    free_log_odds = grid.empty(np.float32)
+    wall_weight = grid.empty(np.float32)
+    traversable_hits = grid.empty(np.float32)
+    observed = np.zeros(grid.shape, dtype=bool)
+
+    # Wall evidence: vertical surfaces in the structural band, weighted by precision.
+    top = structural_band[1]
+    if ceiling_y is not None:
+        top = min(top, ceiling_y - floor_y - 0.12)
+    structural = (height >= structural_band[0]) & (height <= max(top, structural_band[0] + 0.1))
+    vertical = cloud.verticality > 0.88
+    wall_points = structural & vertical
+    if wall_points.any():
+        cells = grid.to_cell(points_xz[wall_points])
+        keep = grid.inside(cells)
+        np.add.at(
+            wall_weight,
+            (cells[keep, 0], cells[keep, 1]),
+            cloud.weight[wall_points][keep].astype(np.float32),
+        )
+
+    traversable = (height >= traversable_band[0]) & (height <= traversable_band[1])
+    if traversable.any():
+        cells = grid.to_cell(points_xz[traversable])
+        keep = grid.inside(cells)
+        np.add.at(traversable_hits, (cells[keep, 0], cells[keep, 1]), 1.0)
+
+    track_cells: list[np.ndarray] = []
+    if camera_positions is not None and len(camera_positions):
+        frame_ids = cloud.frame_index
+        by_frame: dict[int, np.ndarray] = {}
+        order = np.argsort(frame_ids)
+        sorted_ids = frame_ids[order]
+        bounds = np.searchsorted(sorted_ids, np.unique(sorted_ids), side="left")
+        uniq = np.unique(sorted_ids)
+        bounds = np.append(bounds, len(sorted_ids))
+        for i, fid in enumerate(uniq):
+            sel = order[bounds[i] : bounds[i + 1]]
+            by_frame[int(fid)] = sel
+
+        flat_free: list[np.ndarray] = []
+        for cam in camera_positions:
+            cam_xz = cam[[0, 2]]
+            cam_cell = grid.to_cell_float(cam_xz[None, :])[0]
+            track_cells.append(cam_cell)
+            nearby = np.linalg.norm(points_xz - cam_xz, axis=1) < 6.0
+            sel = nearby & traversable
+            if sel.sum() < 8:
+                continue
+            scan = _azimuth_reduce(points_xz[sel], cam_xz, AZIMUTH_BINS)
+            if len(scan) == 0:
+                continue
+            target_cells = grid.to_cell_float(scan)
+            origins = np.repeat(cam_cell[None, :], len(target_cells), axis=0)
+            flat_free.append(_march_rays(grid, origins, target_cells))
+        if flat_free:
+            flat = np.concatenate(flat_free)
+            counts = np.bincount(flat, minlength=grid.shape[0] * grid.shape[1]).astype(np.float32)
+            free_log_odds += (counts * LOG_ODDS_FREE).reshape(grid.shape)
+            observed |= counts.reshape(grid.shape) > 0
+
+    hit_cells = grid.to_cell(points_xz[traversable]) if traversable.any() else np.zeros((0, 2), dtype=np.int64)
+    if len(hit_cells):
+        keep = grid.inside(hit_cells)
+        np.add.at(free_log_odds, (hit_cells[keep, 0], hit_cells[keep, 1]), LOG_ODDS_OCCUPIED)
+        observed[hit_cells[keep, 0], hit_cells[keep, 1]] = True
+
+    np.clip(free_log_odds, -LOG_ODDS_CLAMP, LOG_ODDS_CLAMP, out=free_log_odds)
+
+    return OccupancyMaps(
+        grid=grid,
+        free_log_odds=free_log_odds,
+        wall_weight=wall_weight,
+        traversable_hits=traversable_hits,
+        camera_track=np.array(track_cells) if track_cells else np.zeros((0, 2)),
+        observed=observed,
+    )
