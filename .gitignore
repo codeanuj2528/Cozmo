@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Large binaries: captures, model weights, run outputs.
+data/captures/*
+!data/captures/.gitkeep
+weights/*
+!weights/.gitkeep
+runs/
+*.zip
+*.mp4
+*.ply
