@@ -161,6 +161,15 @@ class StrayCapture:
                 pose_provenance=Provenance.SENSOR,
             )
 
+    def frame_indices(self) -> list[int]:
+        """Frame number of each odometry row, in file order.
+
+        Not the same as the row index whenever a row was dropped for a malformed pose or a
+        missing depth map, which is why consumers that need to name a frame must ask for
+        this rather than reuse their position in the pose array.
+        """
+        return [int(r["frame"]) for r in self._rows]
+
     def poses(self) -> np.ndarray:
         """All poses as an (N, 4, 4) array, in file order."""
         return np.stack([make_pose(quat_to_matrix(*r["quat"]), r["pos"]) for r in self._rows])

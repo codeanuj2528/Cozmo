@@ -38,10 +38,14 @@ MIRROR_FRACTION_THRESHOLD = 0.35
 
 DOOR_MIN_WIDTH_M = 0.55
 DOOR_MAX_WIDTH_M = 1.45
+MAX_OPENING_WIDTH_M = 2.80
 DOOR_MIN_HEIGHT_M = 1.55
 DOOR_MAX_SILL_M = 0.22
 WINDOW_MIN_SILL_M = 0.25
 MIN_OPENING_AREA_M2 = 0.25
+SIDE_SUPPORT_THRESHOLD = 0.30
+MIN_OCCLUDER_STANDOFF_M = 0.35
+OCCLUSION_RATIO = 1.5
 
 
 @dataclass
@@ -148,10 +152,41 @@ def build_elevation(
                 hr = np.clip(((hv[good] + 0.05) / resolution).astype(int), 0, n_v - 1)
                 np.add.at(beyond, (hr, hc), 1.0)
 
-    # Points in front of the plane occlude it: no material reading is expected behind a
-    # wardrobe, and calling that a hole is how a pipeline invents openings.
-    near = in_span & (signed > MATERIAL_BAND_M) & (signed < 1.2)
-    np.add.at(occluded, (rows[near], cols[near]), 1.0)
+    # Occlusion is a statement about line of sight, not about proximity. A point occludes
+    # the wall cell the ray through it would have reached had the point not stopped it, so
+    # the cell is found by extending the camera ray past the point onto the plane -- the
+    # same intersection as the see-through channel, extrapolated rather than interpolated.
+    #
+    # Marking instead every cell that has some point in front of it is wrong in a way that
+    # costs real detections: the floor in front of a doorway sits in front of the door
+    # plane, and projecting it straight back onto the plane blanks out the bottom of every
+    # doorway in the property. Traced as a ray from a camera at standing height, that same
+    # floor point extends to below the floor line and occludes nothing.
+    near = in_span & (signed > MATERIAL_BAND_M) & (signed < 2.0)
+    if near.any():
+        cams = cloud.cameras[near]
+        pts = cloud.points[near]
+        d_cam = (cams - origin) @ normal3
+        d_pt = (pts - origin) @ normal3
+        # The camera must be in front of the plane and further from it than the point is,
+        # or the point is not between the sensor and the wall at all.
+        # Guard the extrapolation. A camera almost touching the plane, which happens on
+        # every frame taken while walking through the doorway itself, divides by a tiny
+        # gap and throws the hit point far down the wall, occluding cells nothing was ever
+        # in front of.
+        usable = (d_cam > MIN_OCCLUDER_STANDOFF_M) & (d_pt > 0) & (d_pt < 0.75 * d_cam)
+        if usable.any():
+            cams, pts = cams[usable], pts[usable]
+            d_cam, d_pt = d_cam[usable], d_pt[usable]
+            t = d_cam / np.maximum(d_cam - d_pt, 1e-6)
+            hit = cams + (pts - cams) * t[:, None]
+            hu = (hit - origin) @ dir3
+            hv = hit[:, 1] - floor_y
+            good = (hu > -0.10) & (hu < wall.length + 0.10) & (hv > -0.05) & (hv < top + 0.05)
+            if good.any():
+                hc = np.clip(((hu[good] + 0.10) / resolution).astype(int), 0, n_u - 1)
+                hr = np.clip(((hv[good] + 0.05) / resolution).astype(int), 0, n_v - 1)
+                np.add.at(occluded, (hr, hc), 1.0)
 
     return Elevation(wall, material, beyond, occluded, resolution, -0.10, -0.05)
 
@@ -194,6 +229,7 @@ def _mirror_fraction(
 
 def detect_openings(
     wall: WallSegment,
+    walls: list[WallSegment],
     cloud: FusedCloud,
     tree: cKDTree,
     floor_y: float,
@@ -213,7 +249,10 @@ def detect_openings(
     see_through = beyond > 0
     see_through = ndimage.binary_closing(see_through, np.ones((3, 3)), iterations=2)
 
-    candidate = see_through & ~solid & (occluded == 0)
+    # See-through evidence has to outweigh occlusion evidence, rather than occlusion
+    # having to be absent. A hard zero lets a single stray ray past a chair leg veto a
+    # doorway that a thousand rays looked straight through.
+    candidate = see_through & ~solid & (beyond > OCCLUSION_RATIO * occluded)
     candidate = remove_small_blobs(candidate, min_cells=int(MIN_OPENING_AREA_M2 / (res * res)))
     if not candidate.any():
         return [], elevation
@@ -229,13 +268,26 @@ def detect_openings(
         v_max = (rows.max() + 1) * res + elevation.v_origin
         width = u_max - u_min
         height = v_max - v_min
-        if width < 0.30 or height < 0.30:
+        if width < 0.30 or height < 0.30 or width > MAX_OPENING_WIDTH_M:
             continue
 
         # Fill ratio guards against an L-shaped union of two unrelated gaps being reported
         # as one large rectangular opening.
         fill = mask.sum() * res * res / max(width * height, 1e-6)
         if fill < 0.45:
+            continue
+
+        # An opening is a hole in a wall, so each side of it must be closed by something:
+        # either measured wall, or a corner where a perpendicular wall meets this one.
+        # Bridging a wall run across its doorway also bridges it across the mouth of a
+        # corridor, and this is what tells the two apart.
+        left_ok = _side_support(
+            has_material, rows.min(), rows.max(), cols.min(), cols.max(), res, "left"
+        ) >= SIDE_SUPPORT_THRESHOLD or _corner_at(wall, u_min, walls)
+        right_ok = _side_support(
+            has_material, rows.min(), rows.max(), cols.min(), cols.max(), res, "right"
+        ) >= SIDE_SUPPORT_THRESHOLD or _corner_at(wall, u_max, walls)
+        if not (left_ok and right_ok):
             continue
 
         mirror = _mirror_fraction(wall, cloud, tree, (u_min, u_max), (v_min, v_max), floor_y)
@@ -270,6 +322,55 @@ def detect_openings(
     return openings, elevation
 
 
+def _side_support(
+    has_material: np.ndarray,
+    row_min: int,
+    row_max: int,
+    col_min: int,
+    col_max: int,
+    resolution: float,
+    side: str,
+    reach_m: float = 0.45,
+) -> float:
+    """How much of an opening's own height has measured wall beside it.
+
+    Restricted to the opening's rows and asking only whether material exists anywhere
+    within reach. Averaging over the full elevation instead counts the rows above whatever
+    height the operator stopped scanning at, so a perfectly solid jamb on a wall scanned to
+    2.2 m of a 3.1 m room scores barely half and fails any useful threshold.
+    """
+    reach = max(int(round(reach_m / resolution)), 2)
+    if side == "left":
+        block = has_material[row_min : row_max + 1, max(col_min - reach, 0) : col_min]
+    else:
+        block = has_material[row_min : row_max + 1, col_max + 1 : col_max + 1 + reach]
+    if block.size == 0:
+        return 0.0
+    return float(block.any(axis=1).mean())
+
+
+def _corner_at(wall: WallSegment, u: float, walls: list[WallSegment], tolerance_m: float = 0.40) -> bool:
+    """True when another wall meets this one at distance `u` along it.
+
+    A doorway in the middle of a wall has a jamb either side. A doorway at the end of a
+    wall has one jamb and a corner, and the wall that forms the corner is perpendicular so
+    it lives in its own elevation and cannot appear in this one. Without this test every
+    door next to a room corner is discarded, and the brief scores a missed opening exactly
+    as hard as a phantom one.
+    """
+    world = wall.start + wall.direction * u
+    for other in walls:
+        if other is wall:
+            continue
+        if abs(float(other.direction @ wall.direction)) > np.cos(np.deg2rad(25.0)):
+            continue
+        perpendicular = abs(float((world - other.start) @ other.normal_xz))
+        along = float((world - other.start) @ other.direction)
+        if perpendicular < tolerance_m and -0.40 <= along <= other.length + 0.40:
+            return True
+    return False
+
+
 def _classify(
     width: float, height: float, sill: float, ceiling_y: float | None, floor_y: float
 ) -> OpeningType | None:
@@ -294,7 +395,7 @@ def detect_all_openings(
     tree = cKDTree(cloud.points)
     out: dict[int, list[DetectedOpening]] = {}
     for i, wall in enumerate(walls):
-        found, _ = detect_openings(wall, cloud, tree, floor_y, ceiling_y)
+        found, _ = detect_openings(wall, walls, cloud, tree, floor_y, ceiling_y)
         if found:
             out[i] = found
     return out

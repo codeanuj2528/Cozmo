@@ -372,3 +372,12 @@ def room_polygons(complex_: CellComplex, min_room_area_m2: float = 1.2) -> dict[
             continue
         out[room] = merged
     return out
+
+
+def room_masks(complex_: CellComplex) -> dict[int, np.ndarray]:
+    """Raster footprint of each room, for restricting measurements to one room's points."""
+    grouped: dict[int, list[int]] = {}
+    for face in complex_.faces:
+        if face.interior and face.room >= 0:
+            grouped.setdefault(face.room, []).append(face.index)
+    return {room: np.isin(complex_.label_raster, ids) for room, ids in grouped.items()}

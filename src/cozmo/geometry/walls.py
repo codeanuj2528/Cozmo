@@ -290,6 +290,66 @@ def extract_wall_segments(
     return segments, candidates
 
 
+def merge_runs(segments: list[WallSegment], max_bridge_m: float = 2.6) -> list[WallSegment]:
+    """Bridge collinear segments separated by a gap a doorway could explain.
+
+    Two representations of the same wall are needed, because two questions want opposite
+    answers from the same geometry.
+
+    "Is there built material along this boundary" wants the tight segments, which stop at
+    every gap. Bridging them would report a wall across a corridor mouth.
+
+    "Where are the holes in this wall" wants the bridged run. A doorway is a gap wider than
+    any material-run tolerance, so a segmentation tight enough to be honest about material
+    always splits a wall at its door, and then no segment spans the door to notice it. That
+    is not a threshold to be tuned: no single value is both narrower than a doorway and
+    wider than one.
+
+    Bridging is capped at the widest opening a building actually has, so two walls either
+    side of a corridor stay two walls.
+    """
+    by_plane: dict[tuple[int, int], list[WallSegment]] = {}
+    for seg in segments:
+        azimuth = int(round(np.degrees(np.arctan2(seg.normal_xz[1], seg.normal_xz[0])) / 3.0))
+        offset = int(round((seg.normal_xz @ seg.start) / 0.06))
+        by_plane.setdefault((azimuth, offset), []).append(seg)
+
+    runs: list[WallSegment] = []
+    for group in by_plane.values():
+        ordered = sorted(group, key=lambda s: s.direction @ s.start)
+        current = [ordered[0]]
+        for seg in ordered[1:]:
+            gap = (seg.direction @ seg.start) - (current[-1].direction @ current[-1].end)
+            if gap <= max_bridge_m:
+                current.append(seg)
+            else:
+                runs.append(_fuse_run(current))
+                current = [seg]
+        runs.append(_fuse_run(current))
+    runs.sort(key=lambda s: s.support_weight, reverse=True)
+    return runs
+
+
+def _fuse_run(group: list[WallSegment]) -> WallSegment:
+    if len(group) == 1:
+        return group[0]
+    anchor = max(group, key=lambda s: s.support_weight)
+    direction = anchor.direction
+    start = min(group, key=lambda s: direction @ s.start).start
+    end = max(group, key=lambda s: direction @ s.end).end
+    return WallSegment(
+        plane=anchor.plane,
+        direction=direction,
+        normal_xz=anchor.normal_xz,
+        start=start,
+        end=end,
+        height_low=float(min(s.height_low for s in group)),
+        height_high=float(max(s.height_high for s in group)),
+        support_weight=float(sum(s.support_weight for s in group)),
+        point_indices=np.concatenate([s.point_indices for s in group]),
+    )
+
+
 def dominant_directions(segments: list[WallSegment], bin_deg: float = 0.5) -> float:
     """Rotation angle, in radians, that brings the dominant wall run onto the x axis.
 
