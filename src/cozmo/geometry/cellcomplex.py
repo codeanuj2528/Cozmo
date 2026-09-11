@@ -1,0 +1,374 @@
+"""Floor plan as a cell complex induced by the wall lines.
+
+A flood fill over a raster is the wrong tool for this job. Its boundary is quantised to the
+grid, it rounds every corner, and it escapes through any gap in wall coverage -- a window,
+an open front door, a stretch of wall the operator never faced -- after which it
+cheerfully reports the corridor outside as part of the property.
+
+Partitioning the floor by the wall lines instead makes leaking geometrically impossible.
+Each face of the arrangement is bounded by lines on all sides, so labelling a face interior
+or exterior is a decision about that face alone and a mistake cannot propagate. Corners
+come out as exact line intersections rather than as staircases of pixels, which is what
+lets a room polygon inherit the millimetre-level offset uncertainty of the plane fits that
+produced it.
+
+The two decisions are kept deliberately separate:
+
+  * Which faces are inside the property. Answered by direct evidence: observed floor,
+    carved free space, and the camera's own track, all of which are proof of standability.
+  * Where one room ends and the next begins. Answered by whether the boundary between two
+    interior faces is actually built. A boundary that runs along observed wall material is
+    a wall, even if it has a doorway in it; a boundary with no material behind it is an
+    artefact of the arrangement and the two faces are one room.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+import cv2
+import numpy as np
+from shapely.geometry import LineString, MultiLineString, Polygon, box
+from shapely.ops import polygonize, unary_union
+
+from cozmo.geometry.grid import Grid2D
+from cozmo.geometry.occupancy import OccupancyMaps
+from cozmo.geometry.walls import WallCandidate, WallSegment
+from cozmo.util.polygons import clean_polygon
+
+MAX_LINES = 44
+MIN_FACE_AREA_M2 = 0.15
+INTERIOR_EVIDENCE_THRESHOLD = 0.22
+WALL_SUPPORT_THRESHOLD = 0.45
+WALL_PROXIMITY_M = 0.14
+MIN_ROOM_AREA_M2 = 1.5
+
+
+@dataclass
+class Face:
+    index: int
+    polygon: Polygon
+    evidence: float
+    track_cells: int
+    area: float
+    interior: bool = False
+    room: int = -1
+
+
+@dataclass
+class CellComplex:
+    faces: list[Face]
+    label_raster: np.ndarray = field(repr=False)
+    grid: Grid2D = field(repr=False)
+    lines: list[LineString] = field(default_factory=list, repr=False)
+
+
+def _clip_line(normal_xz: np.ndarray, offset: float, bounds: Polygon) -> LineString | None:
+    """The infinite line n . x = offset, clipped to `bounds`."""
+    direction = np.array([-normal_xz[1], normal_xz[0]])
+    point = normal_xz * offset
+    far = 10_000.0
+    seg = LineString([point - direction * far, point + direction * far])
+    clipped = seg.intersection(bounds)
+    if clipped.is_empty:
+        return None
+    if isinstance(clipped, MultiLineString):
+        clipped = max(clipped.geoms, key=lambda g: g.length)
+    if not isinstance(clipped, LineString) or clipped.length < 0.2:
+        return None
+    return clipped
+
+
+def build_cell_complex(
+    occ: OccupancyMaps,
+    candidates: list[WallCandidate],
+    segments: list[WallSegment],
+    max_lines: int = MAX_LINES,
+) -> CellComplex:
+    """Partition the observed footprint by the wall lines and label the faces."""
+    grid = occ.grid
+    extent = box(
+        grid.origin[0],
+        grid.origin[1],
+        grid.origin[0] + grid.shape[1] * grid.resolution,
+        grid.origin[1] + grid.shape[0] * grid.resolution,
+    )
+
+    ordered = sorted(candidates, key=lambda c: c.weight, reverse=True)[:max_lines]
+    lines: list[LineString] = []
+    for cand in ordered:
+        line = _clip_line(cand.normal_xz, cand.offset, extent)
+        if line is not None:
+            lines.append(line)
+    if not lines:
+        return CellComplex([], np.zeros(grid.shape, np.int32), grid, [])
+
+    noded = unary_union(lines + [extent.exterior])
+    polygons = [p for p in polygonize(noded) if p.area >= MIN_FACE_AREA_M2]
+    if not polygons:
+        return CellComplex([], np.zeros(grid.shape, np.int32), grid, lines)
+
+    label_raster = np.zeros(grid.shape, dtype=np.int32)
+    for i, poly in enumerate(polygons, start=1):
+        ring = np.asarray(poly.exterior.coords)
+        cells = grid.to_cell_float(ring)
+        cv2.fillPoly(label_raster, [np.round(cells[:, ::-1]).astype(np.int32)], int(i))
+
+    n = len(polygons)
+    # Direct interior evidence. The camera track is counted separately because a single
+    # cell of it outweighs any amount of ambiguity: the operator physically stood there.
+    evidence_mask = occ.floor_hits | (occ.free_mask & occ.observed)
+    flat = label_raster.ravel()
+    total = np.bincount(flat, minlength=n + 1)[1:]
+    hits = np.bincount(flat[evidence_mask.ravel()], minlength=n + 1)[1:]
+
+    track_counts = np.zeros(n + 1, dtype=np.int64)
+    if len(occ.camera_track):
+        track = np.round(occ.camera_track).astype(int)
+        ok = (
+            (track[:, 0] >= 0) & (track[:, 0] < grid.shape[0])
+            & (track[:, 1] >= 0) & (track[:, 1] < grid.shape[1])
+        )
+        track_labels = label_raster[track[ok, 0], track[ok, 1]]
+        track_counts = np.bincount(track_labels, minlength=n + 1)
+
+    faces: list[Face] = []
+    for i, poly in enumerate(polygons, start=1):
+        cells = max(int(total[i - 1]), 1)
+        faces.append(
+            Face(
+                index=i,
+                polygon=poly,
+                evidence=float(hits[i - 1] / cells),
+                track_cells=int(track_counts[i]),
+                area=float(poly.area),
+            )
+        )
+
+    _label_interior(faces, segments)
+    _assign_rooms(faces, label_raster, grid, segments)
+    return CellComplex(faces, label_raster, grid, lines)
+
+
+def _label_interior(faces: list[Face], segments: list[WallSegment]) -> None:
+    """Decide which faces are inside the property."""
+    for face in faces:
+        if face.track_cells > 0:
+            face.interior = True
+            continue
+        face.interior = face.evidence >= INTERIOR_EVIDENCE_THRESHOLD
+
+    # A face that no wall faces cannot be a room. Walls are observed from inside, so their
+    # normals point into the rooms they bound; a face with no wall pointing at it is either
+    # outside the property or inside a solid, and in both cases it is not floor.
+    if not segments:
+        return
+    for face in faces:
+        if not face.interior or face.track_cells > 0:
+            continue
+        if not _faced_by_wall(face.polygon, segments):
+            face.interior = False
+
+
+def _faced_by_wall(poly: Polygon, segments: list[WallSegment], probe_m: float = 0.12) -> bool:
+    centroid = poly.representative_point()
+    for seg in segments:
+        mid = seg.midpoint
+        probe = mid + seg.normal_xz * probe_m
+        if poly.contains(Polygon([probe, probe, probe]).centroid):
+            return True
+    # Fall back to a containment test on a short probe from each wall midpoint.
+    from shapely.geometry import Point
+
+    for seg in segments:
+        for t in (0.25, 0.5, 0.75):
+            base = seg.start + seg.direction * (seg.length * t)
+            if poly.contains(Point(base + seg.normal_xz * probe_m)):
+                return True
+    _ = centroid
+    return False
+
+
+def _shared_boundaries(label_raster: np.ndarray) -> dict[tuple[int, int], list[tuple[int, int]]]:
+    """Cells where two face labels touch, keyed by the ordered label pair."""
+    pairs: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    h, w = label_raster.shape
+    for dr, dc in ((0, 1), (1, 0)):
+        a = label_raster[: h - dr, : w - dc]
+        b = label_raster[dr:, dc:]
+        diff = (a > 0) & (b > 0) & (a != b)
+        if not diff.any():
+            continue
+        rr, cc = np.nonzero(diff)
+        for r, c, la, lb in zip(rr, cc, a[diff], b[diff]):
+            key = (int(min(la, lb)), int(max(la, lb)))
+            pairs.setdefault(key, []).append((int(r), int(c)))
+    return pairs
+
+
+def _wall_support(cells: np.ndarray, grid: Grid2D, segments: list[WallSegment]) -> float:
+    """Fraction of a shared boundary that runs along observed wall material."""
+    if len(cells) == 0 or not segments:
+        return 0.0
+    world = grid.to_world(cells.astype(float))
+    supported = np.zeros(len(world), dtype=bool)
+    for seg in segments:
+        rel = world - seg.start
+        t = rel @ seg.direction
+        perp = np.abs(rel @ seg.normal_xz)
+        on = (t >= -0.05) & (t <= seg.length + 0.05) & (perp <= WALL_PROXIMITY_M)
+        supported |= on
+        if supported.all():
+            break
+    return float(supported.mean())
+
+
+def _assign_rooms(
+    faces: list[Face],
+    label_raster: np.ndarray,
+    grid: Grid2D,
+    segments: list[WallSegment],
+) -> None:
+    """Group interior faces into rooms by union-find over unsupported boundaries."""
+    interior = {f.index: f for f in faces if f.interior}
+    if not interior:
+        return
+
+    parent = {i: i for i in interior}
+
+    def find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for (a, b), cells in _shared_boundaries(label_raster).items():
+        if a not in interior or b not in interior:
+            continue
+        if len(cells) * grid.resolution < 0.12:
+            continue
+        support = _wall_support(np.array(cells), grid, segments)
+        # A boundary with material behind it separates two rooms even when a doorway
+        # punches through it; a boundary with nothing behind it is an artefact of extending
+        # a wall line across the arrangement, and the faces either side are one room.
+        if support < WALL_SUPPORT_THRESHOLD:
+            union(a, b)
+
+    roots = {}
+    for idx in interior:
+        r = find(idx)
+        roots.setdefault(r, len(roots))
+    for idx, face in interior.items():
+        face.room = roots[find(idx)]
+
+    _absorb_fragments(faces, label_raster, grid)
+    _drop_unwalked_rooms(faces)
+    _renumber_rooms(faces)
+
+
+def _absorb_fragments(
+    faces: list[Face],
+    label_raster: np.ndarray,
+    grid: Grid2D,
+    min_room_area_m2: float = MIN_ROOM_AREA_M2,
+) -> None:
+    """Fold sub-room fragments into the neighbouring room they share most boundary with.
+
+    Extending every wall line across the whole arrangement slices a corridor into a chain
+    of pieces, each bounded by the line of some perpendicular wall in a room off it. Those
+    pieces are not rooms at any threshold, and the boundary test cannot merge them because
+    a boundary that lies along a real wall line looks supported even where the wall itself
+    stops short. Area is the honest discriminator: below roughly a square metre and a half
+    a region is part of something, not a room in its own right.
+    """
+    by_room: dict[int, list[Face]] = {}
+    for face in faces:
+        if face.room >= 0:
+            by_room.setdefault(face.room, []).append(face)
+
+    for _ in range(30):
+        areas = {room: sum(f.area for f in fs) for room, fs in by_room.items()}
+        small = [r for r, a in areas.items() if a < min_room_area_m2]
+        if not small or len(by_room) <= 1:
+            break
+
+        boundaries = _shared_boundaries(label_raster)
+        face_room = {f.index: f.room for f in faces if f.room >= 0}
+        contact: dict[tuple[int, int], int] = {}
+        for (a, b), cells in boundaries.items():
+            ra, rb = face_room.get(a, -1), face_room.get(b, -1)
+            if ra < 0 or rb < 0 or ra == rb:
+                continue
+            key = (min(ra, rb), max(ra, rb))
+            contact[key] = contact.get(key, 0) + len(cells)
+
+        target = min(small, key=lambda r: areas[r])
+        options = [
+            (other, n)
+            for (ra, rb), n in contact.items()
+            for other in ((rb,) if ra == target else (ra,) if rb == target else ())
+        ]
+        if not options:
+            for f in by_room.pop(target):
+                f.room = -1
+                f.interior = False
+            continue
+        winner = max(options, key=lambda t: (t[1], areas.get(t[0], 0.0)))[0]
+        for f in by_room.pop(target):
+            f.room = winner
+            by_room.setdefault(winner, []).append(f)
+    _ = grid
+
+
+def _drop_unwalked_rooms(faces: list[Face]) -> None:
+    """Discard rooms the operator never stood in.
+
+    A region that was seen but not entered is usually not a room: it is the outdoors
+    behind a window, a balcony beyond a glass door, or the reflection of the room the
+    operator was standing in. Glass and mirrors both put returns on the far side of a
+    surface, and those returns land in faces with genuine floor evidence and no track.
+    Requiring that a room was walked is the cheapest defence against all three, and it is
+    exactly what the capture protocol asks the operator to do.
+    """
+    by_room: dict[int, list[Face]] = {}
+    for face in faces:
+        if face.room >= 0:
+            by_room.setdefault(face.room, []).append(face)
+    for room, fs in by_room.items():
+        if sum(f.track_cells for f in fs) == 0:
+            for f in fs:
+                f.room = -1
+                f.interior = False
+        _ = room
+
+
+def _renumber_rooms(faces: list[Face]) -> None:
+    rooms = sorted({f.room for f in faces if f.room >= 0})
+    mapping = {old: new for new, old in enumerate(rooms)}
+    for f in faces:
+        if f.room >= 0:
+            f.room = mapping[f.room]
+
+
+def room_polygons(complex_: CellComplex, min_room_area_m2: float = 1.2) -> dict[int, Polygon]:
+    """Merge the faces of each room into one polygon."""
+    grouped: dict[int, list[Polygon]] = {}
+    for face in complex_.faces:
+        if face.interior and face.room >= 0:
+            grouped.setdefault(face.room, []).append(face.polygon)
+
+    out: dict[int, Polygon] = {}
+    for room, polys in grouped.items():
+        merged = unary_union([p.buffer(1e-6) for p in polys]).buffer(-1e-6)
+        if merged.is_empty:
+            continue
+        merged = clean_polygon(merged)
+        if merged.is_empty or merged.geom_type != "Polygon" or merged.area < min_room_area_m2:
+            continue
+        out[room] = merged
+    return out

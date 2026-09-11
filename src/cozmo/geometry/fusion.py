@@ -38,6 +38,7 @@ class FusedCloud:
     sigma: np.ndarray
     weight: np.ndarray
     view_dir: np.ndarray
+    range_m: np.ndarray
     frame_index: np.ndarray
     voxel_m: float = 0.02
 
@@ -49,6 +50,17 @@ class FusedCloud:
         """World y, which is the gravity axis."""
         return self.points[:, 1]
 
+    @property
+    def cameras(self) -> np.ndarray:
+        """Position of the camera that observed each point.
+
+        Reconstructed from the point, its view ray and its range rather than plumbed
+        through from the pose list, so any consumer of a cloud can recover the ray that
+        produced a point without also needing the capture it came from. Occlusion
+        reasoning and see-through detection both need that ray.
+        """
+        return self.points + self.view_dir * self.range_m[:, None]
+
     def select(self, mask: np.ndarray) -> FusedCloud:
         return FusedCloud(
             points=self.points[mask],
@@ -56,6 +68,7 @@ class FusedCloud:
             sigma=self.sigma[mask],
             weight=self.weight[mask],
             view_dir=self.view_dir[mask],
+            range_m=self.range_m[mask],
             frame_index=self.frame_index[mask],
             voxel_m=self.voxel_m,
         )
@@ -68,6 +81,7 @@ class FusedCloud:
             sigma=self.sigma,
             weight=self.weight,
             view_dir=(self.view_dir @ rotation.T).astype(np.float32),
+            range_m=self.range_m,
             frame_index=self.frame_index,
             voxel_m=self.voxel_m,
         )
@@ -189,8 +203,9 @@ def _frame_points(frame: Frame, pixel_stride: int, min_confidence: int, max_rang
     nrm_w = (nrm_cam.astype(np.float64) @ pose[:3, :3].T).astype(np.float32)
     cam_w = pose[:3, 3].astype(np.float32)
     view = cam_w[None, :] - pts_w
-    view /= np.maximum(np.linalg.norm(view, axis=1, keepdims=True), 1e-9)
-    return pts_w, nrm_w, sigma, view
+    ranges = np.linalg.norm(view, axis=1)
+    view /= np.maximum(ranges, 1e-9)[:, None]
+    return pts_w, nrm_w, sigma, view, ranges.astype(np.float32)
 
 
 def fuse(
@@ -202,31 +217,35 @@ def fuse(
     max_range_m: float = 5.0,
 ) -> FusedCloud:
     """Fuse selected frames into one inverse-variance-weighted cloud."""
-    all_pts, all_nrm, all_sig, all_view, all_idx = [], [], [], [], []
+    all_pts, all_nrm, all_sig, all_view, all_rng, all_idx = [], [], [], [], [], []
     for frame in source.frames(list(keyframes)):
         if frame.pose is None:
             continue
         got = _frame_points(frame, pixel_stride, min_confidence, max_range_m)
         if got is None:
             continue
-        pts, nrm, sig, view = got
+        pts, nrm, sig, view, rng = got
         all_pts.append(pts)
         all_nrm.append(nrm)
         all_sig.append(sig)
         all_view.append(view)
+        all_rng.append(rng)
         all_idx.append(np.full(len(pts), frame.index, dtype=np.int32))
 
     if not all_pts:
         empty3 = np.zeros((0, 3), dtype=np.float32)
         empty1 = np.zeros(0, dtype=np.float32)
-        return FusedCloud(empty3, empty3, empty1, empty1, empty3, np.zeros(0, dtype=np.int32), voxel_m)
+        return FusedCloud(
+            empty3, empty3, empty1, empty1, empty3, empty1, np.zeros(0, dtype=np.int32), voxel_m
+        )
 
     points = np.concatenate(all_pts)
     normals = np.concatenate(all_nrm)
     sigma = np.concatenate(all_sig)
     view = np.concatenate(all_view)
+    ranges = np.concatenate(all_rng)
     frame_index = np.concatenate(all_idx)
-    return voxel_reduce(points, normals, sigma, view, frame_index, voxel_m)
+    return voxel_reduce(points, normals, sigma, view, ranges, frame_index, voxel_m)
 
 
 def voxel_reduce(
@@ -234,6 +253,7 @@ def voxel_reduce(
     normals: np.ndarray,
     sigma: np.ndarray,
     view: np.ndarray,
+    ranges: np.ndarray,
     frame_index: np.ndarray,
     voxel_m: float,
 ) -> FusedCloud:
@@ -264,6 +284,7 @@ def voxel_reduce(
     # reciprocal of the summed precision. Averaging the sigmas instead would throw away
     # the benefit of having looked at the same wall from several viewpoints.
     out_sigma = np.sqrt(1.0 / wsum)
+    out_range = np.bincount(inverse, weights=ranges * weight, minlength=n_vox) / wsum
     first_idx = np.zeros(n_vox, dtype=np.int32)
     order = np.argsort(inverse, kind="stable")
     first_positions = np.searchsorted(inverse[order], np.arange(n_vox))
@@ -275,6 +296,7 @@ def voxel_reduce(
         sigma=out_sigma.astype(np.float32),
         weight=wsum.astype(np.float32),
         view_dir=out_view.astype(np.float32),
+        range_m=out_range.astype(np.float32),
         frame_index=first_idx,
         voxel_m=float(voxel_m),
     )

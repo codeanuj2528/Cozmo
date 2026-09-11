@@ -38,6 +38,8 @@ class OccupancyMaps:
     traversable_hits: np.ndarray
     camera_track: np.ndarray
     observed: np.ndarray
+    floor_hits: np.ndarray
+    structural_hits: np.ndarray
 
     @property
     def free_mask(self) -> np.ndarray:
@@ -127,7 +129,23 @@ def build_occupancy(
     free_log_odds = grid.empty(np.float32)
     wall_weight = grid.empty(np.float32)
     traversable_hits = grid.empty(np.float32)
+    floor_hits = np.zeros(grid.shape, dtype=bool)
+    structural_hits = np.zeros(grid.shape, dtype=bool)
     observed = np.zeros(grid.shape, dtype=bool)
+
+    # Cells where the floor itself was seen. This is the strongest interior evidence there
+    # is: a floor return is proof that the cell is standable, with no inference in between.
+    floor_seen = (np.abs(height) < 0.07) & (cloud.normals[:, 1] > 0.90)
+    if floor_seen.any():
+        cells = grid.to_cell(points_xz[floor_seen])
+        keep = grid.inside(cells)
+        floor_hits[cells[keep, 0], cells[keep, 1]] = True
+
+    any_structure = height > 0.10
+    if any_structure.any():
+        cells = grid.to_cell(points_xz[any_structure])
+        keep = grid.inside(cells)
+        structural_hits[cells[keep, 0], cells[keep, 1]] = True
 
     # Wall evidence: vertical surfaces in the structural band, weighted by precision.
     top = structural_band[1]
@@ -199,5 +217,7 @@ def build_occupancy(
         wall_weight=wall_weight,
         traversable_hits=traversable_hits,
         camera_track=np.array(track_cells) if track_cells else np.zeros((0, 2)),
-        observed=observed,
+        observed=observed | floor_hits | structural_hits,
+        floor_hits=floor_hits,
+        structural_hits=structural_hits,
     )
