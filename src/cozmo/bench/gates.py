@@ -335,6 +335,58 @@ def gate_drift_accountability(plan: PropertyPlan, capture_id: str) -> GateResult
     )
 
 
+def gate_adjacency(plan: PropertyPlan, truth: GroundTruth, capture_id: str) -> GateResult:
+    """Is the stitched plan connected the way the property actually is.
+
+    The brief calls the stitched plan the product surface and asks for correct adjacency,
+    so adjacency has to be scored, not merely emitted. It is scored the same way openings
+    are: a missing edge and an invented edge each count against, with the denominator the
+    larger of what was reported and what exists. Counting only the edges that were both
+    reported and real would let a plan that joins one pair of rooms in a four-room flat
+    score full marks.
+
+    Ground truth comes from `adjacency` rows in the recording sheet, where the operator
+    writes down which room connects to which.
+    """
+    expected: set[frozenset[str]] = set()
+    for record in truth.for_capture(capture_id):
+        if record.quantity == "adjacency" and record.room and record.identifier:
+            expected.add(frozenset({record.room, record.identifier}))
+
+    if not expected:
+        return GateResult("adjacency", capture_id, plan.tier.value,
+                          "no adjacency ground truth", "all edges correct", Status.SKIP)
+
+    names = {room.room_id: (resolve_room(room, truth) or room.room_id) for room in plan.rooms}
+    reported = {
+        frozenset({names.get(link.room_a, link.room_a), names.get(link.room_b, link.room_b)})
+        for link in plan.adjacency
+    }
+
+    correct = expected & reported
+    missed = expected - reported
+    phantom = reported - expected
+    denominator = max(len(expected), len(reported))
+    fraction = len(correct) / max(denominator, 1)
+
+    return GateResult(
+        gate="adjacency",
+        scope=capture_id,
+        tier=plan.tier.value,
+        measured=(
+            f"{len(correct)}/{denominator} correct ({fraction:.0%}); "
+            f"{len(missed)} missed, {len(phantom)} phantom"
+        ),
+        threshold="every real connection found, none invented",
+        status=Status.PASS if not missed and not phantom else Status.FAIL,
+        detail={
+            "correct": len(correct),
+            "missed": sorted("-".join(sorted(e)) for e in missed),
+            "phantom": sorted("-".join(sorted(e)) for e in phantom),
+        },
+    )
+
+
 def gate_repeatability(
     plans: list[PropertyPlan], truth: GroundTruth, capture_ids: list[str]
 ) -> GateResult:
@@ -403,6 +455,7 @@ def score_capture(plan: PropertyPlan, truth: GroundTruth, capture_id: str) -> li
         gate_footprint(plan, truth, capture_id),
         gate_interval_coverage(plan, truth, capture_id),
         gate_room_overlap(plan, capture_id),
+        gate_adjacency(plan, truth, capture_id),
         gate_drift_accountability(plan, capture_id),
     ]
 
