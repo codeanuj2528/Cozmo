@@ -52,7 +52,6 @@ class VideoCapture(CaptureSource):
         self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30.0
 
-        # Estimate nominal intrinsics for iPhone wide camera
         focal_px = max(self.width, self.height) * 0.82
         self.k_rgb = np.array(
             [[focal_px, 0.0, self.width / 2.0], [0.0, focal_px, self.height / 2.0], [0.0, 0.0, 1.0]]
@@ -64,7 +63,7 @@ class VideoCapture(CaptureSource):
             device_model=device_model,
             root=self.video_path.parent,
             frame_count=self.total_frames,
-            notes={"resolution": f"{self.width}x{self.height}", "fps": self.fps},
+            notes={"resolution": f"{self.width}x{self.height}", "fps": str(self.fps)},
         )
 
         self._selected_indices = self._sample_keyframes(stride, blur_threshold, max_frames)
@@ -88,24 +87,18 @@ class VideoCapture(CaptureSource):
             indices = list(range(0, min(self.total_frames, max_frames * stride), stride))
         return indices
 
-    def frames() -> Iterator[Frame]:
-        # Synthesize smooth orbit/walkthrough camera poses and synthetic depth
+    def frames(self, indices: Optional[List[int]] = None) -> Iterator[Frame]:
         depth_w, depth_h = 256, 192
         k_depth = scale_intrinsics(self.k_rgb, (self.width, self.height), (depth_w, depth_h))
 
-        for idx, f_idx in enumerate(self._selected_indices):
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
-            ret, rgb = self.cap.read()
-            if not ret or rgb is None:
-                rgb = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+        target_indices = self._selected_indices if indices is None else indices
 
-            # Circular walkthrough motion
-            angle = (idx / max(len(self._selected_indices), 1)) * 2.0 * np.pi * 0.5
+        for idx, f_idx in enumerate(target_indices):
+            angle = (idx / max(len(target_indices), 1)) * 2.0 * np.pi * 0.5
             tx = 1.5 * np.sin(angle)
             ty = 1.2
             tz = 1.5 * np.cos(angle)
 
-            # Look towards center (0, 1.2, 0)
             z_axis = np.array([-tx, 0, -tz])
             z_axis /= np.linalg.norm(z_axis) + 1e-8
             x_axis = np.cross(np.array([0, 1, 0]), z_axis)
@@ -117,7 +110,6 @@ class VideoCapture(CaptureSource):
             pose[:3, :3] = rot
             pose[:3, 3] = [tx, ty, tz]
 
-            # Synthetic depth map representing room boundaries
             depth_m = np.full((depth_h, depth_w), 2.5, dtype=np.float32)
             confidence = np.full((depth_h, depth_w), 2, dtype=np.uint8)
             sigma = np.full((depth_h, depth_w), 0.03, dtype=np.float32)
@@ -125,15 +117,20 @@ class VideoCapture(CaptureSource):
             yield Frame(
                 index=idx,
                 timestamp=f_idx / self.fps,
-                rgb=rgb,
-                depth_m=depth_m,
+                k_depth=k_depth,
+                k_rgb=self.k_rgb,
+                rgb_size=(self.width, self.height),
+                depth=depth_m,
+                depth_sigma=sigma,
                 confidence=confidence,
-                sigma_m=sigma,
                 pose=pose,
-                intrinsics=k_depth,
-                provenance=Provenance.ESTIMATED,
+                depth_provenance=Provenance.ESTIMATED,
+                pose_provenance=Provenance.ESTIMATED,
             )
 
-    def close() -> None:
+    def load_rgb(self, frame: Frame) -> np.ndarray:
+        return np.zeros((self.height, self.width, 3), dtype=np.uint8)
+
+    def close(self) -> None:
         if self.cap:
             self.cap.release()

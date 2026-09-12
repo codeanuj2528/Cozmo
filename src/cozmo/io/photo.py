@@ -31,7 +31,6 @@ class PhotoCapture(CaptureSource):
         self.root = Path(root)
         self.room_folders: Dict[str, List[Path]] = {}
 
-        # Discover per-room subfolders or image files
         subdirs = [p for p in self.root.iterdir() if p.is_dir() and not p.name.startswith(".")]
         if subdirs:
             for s in subdirs:
@@ -57,10 +56,11 @@ class PhotoCapture(CaptureSource):
             device_model=device_model,
             root=self.root,
             frame_count=total_images,
-            notes={"rooms": len(self.room_folders), "photo_count": total_images},
+            groups=sorted(list(self.room_folders.keys())),
+            notes={"rooms": str(len(self.room_folders)), "photo_count": str(total_images)},
         )
 
-    def frames(self) -> Iterator[Frame]:
+    def frames(self, indices: Optional[List[int]] = None) -> Iterator[Frame]:
         depth_w, depth_h = 256, 192
         global_idx = 0
 
@@ -76,7 +76,6 @@ class PhotoCapture(CaptureSource):
                 k_rgb = np.array([[focal_px, 0.0, w / 2.0], [0.0, focal_px, h / 2.0], [0.0, 0.0, 1.0]])
                 k_depth = scale_intrinsics(k_rgb, (w, h), (depth_w, depth_h))
 
-                # Synthesize room poses around corners
                 angle = (r_idx / max(n_photos, 1)) * 2.0 * np.pi * 0.8
                 tx = 2.0 * np.sin(angle)
                 ty = 1.2
@@ -91,15 +90,27 @@ class PhotoCapture(CaptureSource):
                 confidence = np.full((depth_h, depth_w), 1, dtype=np.uint8)
                 sigma = np.full((depth_h, depth_w), 0.08, dtype=np.float32)
 
-                yield Frame(
-                    index=global_idx,
-                    timestamp=float(global_idx),
-                    rgb=rgb,
-                    depth_m=depth_m,
-                    confidence=confidence,
-                    sigma_m=sigma,
-                    pose=pose,
-                    intrinsics=k_depth,
-                    provenance=Provenance.ESTIMATED,
-                )
+                if indices is None or global_idx in indices:
+                    yield Frame(
+                        index=global_idx,
+                        timestamp=float(global_idx),
+                        k_depth=k_depth,
+                        k_rgb=k_rgb,
+                        rgb_size=(w, h),
+                        depth=depth_m,
+                        depth_sigma=sigma,
+                        confidence=confidence,
+                        pose=pose,
+                        depth_provenance=Provenance.ESTIMATED,
+                        pose_provenance=Provenance.ESTIMATED,
+                        rgb_path=img_p,
+                        group=room_name,
+                    )
                 global_idx += 1
+
+    def load_rgb(self, frame: Frame) -> np.ndarray:
+        if frame.rgb_path and frame.rgb_path.exists():
+            img = cv2.imread(str(frame.rgb_path))
+            if img is not None:
+                return img
+        return np.zeros((1080, 1440, 3), dtype=np.uint8)

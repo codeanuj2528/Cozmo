@@ -191,6 +191,9 @@ def propose_loops(
     return [(i, j) for _, i, j in scored[:max_candidates]]
 
 
+find_loop_closures = propose_loops
+
+
 def verify_loops(
     clouds: list[KeyframeCloud],
     poses: np.ndarray,
