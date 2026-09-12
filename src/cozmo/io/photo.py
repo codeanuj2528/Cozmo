@@ -12,6 +12,7 @@ from typing import Dict, Iterator, List, Optional
 import cv2
 import numpy as np
 
+from cozmo.io.discover import IMAGE_EXTENSIONS, find_images, read_image
 from cozmo.io.base import CaptureMeta, CaptureSource, Frame, Provenance
 from cozmo.schema import Tier
 from cozmo.util.transforms import scale_intrinsics
@@ -39,23 +40,23 @@ class PhotoCapture(CaptureSource):
             for s in subdirs:
                 if s.name.lower() in ("rgb",):
                     continue
-                imgs = sorted(
-                    list(s.glob("*.jpg")) + list(s.glob("*.jpeg")) + list(s.glob("*.png"))
-                )
+                imgs = find_images(s)
                 if imgs:
                     self.room_folders[s.name] = imgs
         
         if not self.room_folders:
             # Fall back to root or rgb directory
             target_dir = self.root / "rgb" if (self.root / "rgb").exists() else self.root
-            imgs = sorted(
-                list(target_dir.glob("*.jpg")) + list(target_dir.glob("*.jpeg")) + list(target_dir.glob("*.png"))
-            )
+            imgs = find_images(target_dir)
             if imgs:
                 self.room_folders["room_01"] = imgs
 
         if not self.room_folders:
-            raise FileNotFoundError(f"No image files (.jpg/.png) found under {root}")
+            raise FileNotFoundError(
+                f"No image files found under {root}. Looked for "
+                f"{', '.join(IMAGE_EXTENSIONS)} in any capitalisation, directly in that "
+                f"directory and in one level of subdirectories."
+            )
 
         total_images = sum(len(imgs) for imgs in self.room_folders.values())
         self.meta = CaptureMeta(

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from cozmo.io.base import CaptureSource
 from cozmo.io.photo import PhotoCapture
+from cozmo.io.discover import find_images, find_videos
 from cozmo.io.stray import StrayCapture
 from cozmo.io.video import VideoCapture
 from cozmo.schema import Tier
@@ -34,7 +35,7 @@ def load_capture(root: Path | str, capture_id: str | None = None) -> CaptureSour
     if (p / "odometry.csv").exists() or any((p / sub / "odometry.csv").exists() for sub in p.iterdir() if sub.is_dir()):
         return StrayCapture(p, capture_id=capture_id)
 
-    video_files = list(p.glob("*.mp4")) + list(p.glob("*.mov"))
+    video_files = find_videos(p)
     if video_files and not (p / "depth").exists():
         return VideoCapture(p, capture_id=capture_id)
 

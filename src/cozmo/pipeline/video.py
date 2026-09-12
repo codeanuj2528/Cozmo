@@ -31,6 +31,7 @@ import cv2
 import numpy as np
 
 from cozmo.config import PipelineConfig
+from cozmo.io.discover import find_videos
 from cozmo.io.base import CaptureSource, Frame, Provenance
 from cozmo.io.posed import PosedFrameSource
 from cozmo.pipeline.common import PipelineResult
@@ -130,9 +131,7 @@ def build_video_plan(
 
     video_path = getattr(source, "video_path", None)
     if video_path is None:
-        candidates = list(Path(source.meta.root).glob("*.mp4")) + list(
-            Path(source.meta.root).glob("*.mov")
-        )
+        candidates = find_videos(Path(source.meta.root))
         if not candidates:
             raise ValueError("video tier needs a .mp4 or .mov in the capture directory")
         video_path = candidates[0]

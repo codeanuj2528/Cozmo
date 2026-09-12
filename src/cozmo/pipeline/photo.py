@@ -35,6 +35,7 @@ import numpy as np
 from cozmo import __version__
 from cozmo.config import PipelineConfig
 from cozmo.io.base import CaptureSource, Frame, Provenance
+from cozmo.io.discover import read_image
 from cozmo.io.posed import PosedFrameSource
 from cozmo.pipeline.common import PipelineArtifacts, PipelineResult
 from cozmo.recon.backbone import get_backbone
@@ -76,10 +77,11 @@ class RoomReconstruction:
 
 def _prepare_image(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
     """Load a still and return it with its working-resolution copy."""
-    raw = cv2.imread(str(path), cv2.IMREAD_COLOR)
-    if raw is None:
+    try:
+        rgb = read_image(path)
+    except Exception as exc:
+        log.warning("could not read %s: %s", path.name, exc)
         return None
-    rgb = cv2.cvtColor(raw, cv2.COLOR_BGR2RGB)
     height = max(int(round(WORKING_WIDTH * rgb.shape[0] / rgb.shape[1])), 8)
     small = cv2.resize(rgb, (WORKING_WIDTH, height), interpolation=cv2.INTER_AREA)
     return rgb, small

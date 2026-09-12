@@ -12,6 +12,7 @@ from typing import Iterator, List, Optional
 import cv2
 import numpy as np
 
+from cozmo.io.discover import find_videos
 from cozmo.io.base import CaptureMeta, CaptureSource, Frame, Provenance
 from cozmo.schema import Tier
 from cozmo.util.transforms import scale_intrinsics
@@ -37,7 +38,7 @@ class VideoCapture(CaptureSource):
     ) -> None:
         self.video_path = Path(video_path)
         if self.video_path.is_dir():
-            candidates = list(self.video_path.glob("*.mp4")) + list(self.video_path.glob("*.mov"))
+            candidates = find_videos(self.video_path)
             if candidates:
                 self.video_path = candidates[0]
             else:
