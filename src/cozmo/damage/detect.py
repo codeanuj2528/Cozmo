@@ -44,6 +44,13 @@ MAX_DETECTIONS_PER_FRAME = 8
 SURFACE_ASSIGN_TOLERANCE_M = 0.12
 MERGE_DISTANCE_M = 0.35
 
+# A finding must be seen from more than one viewpoint. This is the defence against the
+# three surfaces the brief calls out -- mirrors, glass and wet-look floors -- and against
+# specular highlights generally. A reflection is view-dependent: it sits at a different
+# place on the wall from every camera position, so it never reprojects to the same patch
+# of surface twice. Real damage is attached to the surface and does.
+MIN_EVIDENCE_FRAMES = 2
+
 
 @dataclass
 class ImageDetection:
@@ -399,7 +406,12 @@ def build_damage_regions(
             )
 
     regions: list[DamageRegion] = []
-    for index, group in enumerate(merged, start=1):
+    index = 0
+    for group in merged:
+        frames = sorted(set(int(f) for f in group["frames"]))
+        if len(frames) < MIN_EVIDENCE_FRAMES:
+            continue
+        index += 1
         uv = group["uv"]
         u_min, v_min = uv.min(axis=0)
         u_max, v_max = uv.max(axis=0)
@@ -435,9 +447,16 @@ def build_damage_regions(
                 ],
                 severity=_severity(group["class"], value),
                 classification_confidence=float(
-                    np.clip(group["score"] * (0.7 if detector_name == "classical" else 1.0), 0.05, 0.95)
+                    np.clip(
+                        group["score"]
+                        * (0.7 if detector_name == "classical" else 1.0)
+                        # Corroboration across viewpoints is evidence in its own right.
+                        * min(1.0, 0.6 + 0.2 * len(frames)),
+                        0.05,
+                        0.95,
+                    )
                 ),
-                evidence_frames=sorted(set(int(f) for f in group["frames"])),
+                evidence_frames=frames,
             )
         )
     return regions

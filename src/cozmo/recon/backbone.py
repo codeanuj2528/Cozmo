@@ -159,7 +159,51 @@ class FallbackBackbone(DepthBackbone):
 # Backbone selection
 # ---------------------------------------------------------------------------
 
+class DepthAnythingV2MetricBackbone(DepthBackbone):
+    """Depth Anything V2 Metric Indoor, loaded from a local snapshot.
+
+    Metric rather than relative on purpose. The relative model predicts affine-invariant
+    inverse depth (a/z + b), so inverting its output is not proportional to depth unless b
+    is known, and recovering scale from a single cue would then be fitting one unknown to a
+    two-parameter family -- producing a room whose shape is wrong in a way no scale factor
+    can correct. The metric model predicts z, leaving one multiplicative unknown that the
+    camera-height prior can honestly pin.
+    """
+
+    name = "depth_anything_v2_metric_indoor"
+
+    def __init__(self, model_dir: Path) -> None:
+        import torch
+        from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
+        self._torch = torch
+        self._processor = AutoImageProcessor.from_pretrained(str(model_dir))
+        self._model = AutoModelForDepthEstimation.from_pretrained(str(model_dir))
+        self._model.eval()
+        # MPS on Apple silicon is roughly an order of magnitude faster than CPU here and
+        # the walk-in test is timed.
+        self._device = "mps" if torch.backends.mps.is_available() else "cpu"
+        self._model.to(self._device)
+
+    def estimate(self, image: np.ndarray) -> np.ndarray:
+        torch = self._torch
+        inputs = self._processor(images=image, return_tensors="pt").to(self._device)
+        with torch.no_grad():
+            outputs = self._model(**inputs)
+        depth = outputs.predicted_depth
+        if depth.ndim == 3:
+            depth = depth.unsqueeze(1)
+        depth = torch.nn.functional.interpolate(
+            depth, size=image.shape[:2], mode="bicubic", align_corners=False
+        )
+        return depth.squeeze().float().cpu().numpy().astype(np.float32)
+
+    def is_metric(self) -> bool:
+        return True
+
+
 _BACKBONE_REGISTRY = [
+    ("depth-anything-v2-metric-indoor-small", DepthAnythingV2MetricBackbone),
     ("depth_anything_v2_vitl.pth", DepthAnythingV2Backbone),
     ("ZoeD_M12_N.pt", ZoeDepthBackbone),
     ("vggt-1b.bin", VGGTBackbone),

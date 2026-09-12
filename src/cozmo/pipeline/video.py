@@ -1,22 +1,23 @@
-"""Video tier reconstruction — from a walkthrough clip to a dimensioned plan.
+"""Video tier: a handheld walkthrough clip to a stitched whole-property plan.
 
-The video tier takes a single .mp4 or .mov recorded by an adjuster walking
-through the property.  It does *not* have a separate reconstruction pipeline;
-it extracts keyframes from the video and delegates to the photo path.  This is
-by design: maintaining two SfM paths would cause them to drift apart, and the
-tier comparison would then measure implementation differences rather than
-sensor differences.
+The video tier sits between the other two and its structure should reflect that rather
+than copying either. Like the photo tier it has no depth and no poses and must predict
+both. Unlike the photo tier it has continuity: consecutive frames overlap heavily, so
+poses chain, and the walk returns past places it has already been, so loop closure has
+something to close.
 
-Frame selection strategy:
+That continuity is worth using rather than discarding. Treating a walkthrough as a bag of
+per-room photo folders throws away the one advantage the tier has and forces the property
+back together through doorway matching, which is a harder problem than sequential
+registration and a strictly worse answer when the trajectory is right there in the file.
+So the video tier registers frames in sequence into one property-wide cloud and then runs
+the same core as the LiDAR tier, drift correction included.
 
-1. Decode frames at ``stride`` intervals (default: every 5th frame).
-2. Reject frames below the blur threshold (Laplacian variance).
-3. Select a diverse subset by optical-flow–based scene-change detection.
-4. Cap at ``max_frames`` to bound runtime.
-
-The video tier's intervals are between LiDAR and photo because VIO is
-unavailable but temporal coherence supplies pose constraints that still images
-lack.
+Frame selection matters more here than anywhere else. A walkthrough is mostly redundant and
+partly unusable: a phone swung through a doorway produces frames whose motion blur destroys
+both the depth prediction and the registration that depends on it. Frames are therefore
+scored on sharpness before anything else looks at them, and a blurred frame is dropped
+rather than fed to a depth model that will confidently hallucinate a surface for it.
 """
 
 from __future__ import annotations
@@ -25,171 +26,92 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 import cv2
 import numpy as np
 
-from cozmo import __version__
 from cozmo.config import PipelineConfig
-from cozmo.io.base import CaptureSource
-from cozmo.pipeline.common import PipelineArtifacts, PipelineResult
-from cozmo.pipeline.photo import (
-    DEFAULT_BLUR_THRESHOLD,
-    _laplacian_variance,
-    build_photo_plan,
-)
-from cozmo.schema import (
-    CalibrationReport,
-    DriftReport,
-    IntervalMethod,
-    Measure,
-    PropertyPlan,
-    QualityReport,
-    Room,
-    Tier,
-    Wall,
-)
+from cozmo.io.base import CaptureSource, Frame, Provenance
+from cozmo.io.posed import PosedFrameSource
+from cozmo.pipeline.common import PipelineResult
+from cozmo.recon.backbone import get_backbone
+from cozmo.recon.monocular import intrinsics_from_exif, make_metric
+from cozmo.recon.register import register_sequential
+from cozmo.schema import Tier
 from cozmo.uncertainty.calibration import IntervalBook
+from cozmo.util.transforms import make_pose, scale_intrinsics
 
-log = logging.getLogger("cozmo.pipeline.video")
+log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-DEFAULT_STRIDE_FRAMES = 5
-DEFAULT_MAX_FRAMES = 60
-DEFAULT_SCENE_CHANGE_THRESHOLD = 30.0
-
-
-# ---------------------------------------------------------------------------
-# Frame extraction
-# ---------------------------------------------------------------------------
+WORKING_WIDTH = 320
+TARGET_KEYFRAMES = 120
+# Variance of the Laplacian, the standard sharpness proxy. The absolute value depends on
+# resolution and content, so it is used relatively: frames in the bottom fraction of the
+# clip's own sharpness distribution are dropped rather than compared to a fixed number.
+BLUR_REJECT_FRACTION = 0.25
 
 
-def extract_keyframes_from_video(
+def _sharpness(image: np.ndarray) -> float:
+    grey = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) if image.ndim == 3 else image
+    return float(cv2.Laplacian(grey, cv2.CV_64F).var())
+
+
+def extract_keyframes(
     video_path: Path,
-    stride: int = DEFAULT_STRIDE_FRAMES,
-    max_frames: int = DEFAULT_MAX_FRAMES,
-    blur_threshold: float = DEFAULT_BLUR_THRESHOLD,
-) -> list[np.ndarray]:
-    """Extract sharp, diverse keyframes from a video file.
+    target: int = TARGET_KEYFRAMES,
+    blur_reject_fraction: float = BLUR_REJECT_FRACTION,
+) -> tuple[list[int], list[np.ndarray], dict[str, float]]:
+    """Sample a clip down to sharp, spread-out keyframes.
 
-    Returns a list of BGR images ready for depth estimation.
+    Sampled at a uniform stride first and filtered for sharpness second, so the frames that
+    survive still cover the whole walk. Filtering first and then sampling would bias the
+    selection toward whichever rooms the operator moved slowly through.
     """
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        raise FileNotFoundError(f"cannot open video: {video_path}")
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        raise ValueError(f"cannot open video: {video_path}")
 
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    log.info(
-        "video: %d frames @ %.1f fps (%.1f s), stride=%d",
-        total_frames,
-        fps,
-        total_frames / fps,
-        stride,
-    )
+    total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total <= 0:
+        total = 1 << 20
+    # Oversample, then let the blur filter take its cut without dropping below target.
+    wanted = max(int(target / max(1.0 - blur_reject_fraction, 0.1)), target)
+    stride = max(int(total / wanted), 1)
 
-    candidates: list[tuple[int, np.ndarray, float]] = []
-    frame_idx = 0
-    prev_gray: Optional[np.ndarray] = None
-
+    indices: list[int] = []
+    images: list[np.ndarray] = []
+    sharpness: list[float] = []
+    position = 0
     while True:
-        ret, frame = cap.read()
-        if not ret:
+        ok = capture.grab()
+        if not ok:
             break
+        if position % stride == 0:
+            ok, bgr = capture.retrieve()
+            if ok:
+                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                height = max(int(round(WORKING_WIDTH * rgb.shape[0] / rgb.shape[1])), 8)
+                small = cv2.resize(rgb, (WORKING_WIDTH, height), interpolation=cv2.INTER_AREA)
+                indices.append(position)
+                images.append(small)
+                sharpness.append(_sharpness(small))
+        position += 1
+    capture.release()
 
-        if frame_idx % stride == 0:
-            sharpness = _laplacian_variance(frame)
-            if sharpness >= blur_threshold:
-                # Scene-change detection via mean absolute frame difference.
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                scene_change = 0.0
-                if prev_gray is not None:
-                    diff = cv2.absdiff(gray, prev_gray)
-                    scene_change = float(diff.mean())
-                prev_gray = gray
+    stats = {"frames_in_clip": float(position), "frames_sampled": float(len(indices))}
+    if not indices:
+        return [], [], stats
 
-                candidates.append((frame_idx, frame.copy(), scene_change))
+    threshold = float(np.quantile(sharpness, blur_reject_fraction))
+    keep = [i for i, s in enumerate(sharpness) if s >= threshold]
+    if len(keep) > target:
+        step = len(keep) / target
+        keep = [keep[int(i * step)] for i in range(target)]
 
-        frame_idx += 1
-
-    cap.release()
-
-    if not candidates:
-        log.warning("video: no frames passed blur filter, using best-effort")
-        cap2 = cv2.VideoCapture(str(video_path))
-        backup = []
-        idx = 0
-        while len(backup) < max_frames:
-            ret, frame = cap2.read()
-            if not ret:
-                break
-            if idx % (stride * 3) == 0:
-                backup.append(frame.copy())
-            idx += 1
-        cap2.release()
-        return backup
-
-    # Sort by scene change (prefer diverse frames) and take top max_frames.
-    candidates.sort(key=lambda x: x[2], reverse=True)
-    selected = candidates[:max_frames]
-    selected.sort(key=lambda x: x[0])  # restore temporal order
-
-    log.info(
-        "video: selected %d keyframes from %d candidates", len(selected), len(candidates)
-    )
-    return [frame for _, frame, _ in selected]
-
-
-# ---------------------------------------------------------------------------
-# Video-to-room grouping
-# ---------------------------------------------------------------------------
-
-
-def _segment_rooms_by_scene_change(
-    frames: list[np.ndarray],
-    threshold: float = DEFAULT_SCENE_CHANGE_THRESHOLD,
-) -> dict[str, list[np.ndarray]]:
-    """Group frames into rooms by detecting large scene changes.
-
-    Adjacent frames with similar content belong to the same room.  A large
-    scene change (e.g. walking through a doorway) starts a new room.
-    """
-    if not frames:
-        return {}
-
-    rooms: dict[str, list[np.ndarray]] = {}
-    current_room = 1
-    current_frames = [frames[0]]
-    prev_gray = cv2.cvtColor(frames[0], cv2.COLOR_BGR2GRAY)
-
-    for frame in frames[1:]:
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        diff = float(cv2.absdiff(gray, prev_gray).mean())
-
-        if diff > threshold:
-            room_id = f"room_{current_room:02d}"
-            rooms[room_id] = current_frames
-            current_room += 1
-            current_frames = [frame]
-        else:
-            current_frames.append(frame)
-
-        prev_gray = gray
-
-    # Last group.
-    room_id = f"room_{current_room:02d}"
-    rooms[room_id] = current_frames
-
-    return rooms
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
+    stats["frames_kept"] = float(len(keep))
+    stats["blur_threshold"] = threshold
+    stats["median_sharpness"] = float(np.median(sharpness))
+    return [indices[i] for i in keep], [images[i] for i in keep], stats
 
 
 def build_video_plan(
@@ -197,151 +119,107 @@ def build_video_plan(
     config: PipelineConfig | None = None,
     book: IntervalBook | None = None,
 ) -> PipelineResult:
-    """Reconstruct a property from a walkthrough video.
-
-    This extracts keyframes, segments them into rooms by scene change, and
-    delegates per-room reconstruction to the photo pipeline.
-    """
-    from cozmo.geometry.fusion import FusedCloud
-    from cozmo.geometry.levels import LevelEstimate
+    """Reconstruct a property from one continuous walkthrough clip."""
+    from cozmo.pipeline.lidar import build_lidar_plan
+    from cozmo.pipeline.photo import _cloud_from_depth
 
     config = config or PipelineConfig()
     book = book or IntervalBook.load(config.calibration_path)
     started = time.perf_counter()
-    timings: dict[str, float] = {}
     warnings: list[str] = []
 
-    # Find the video file.
-    video_path: Optional[Path] = None
-    if hasattr(source, "video_path"):
-        video_path = source.video_path
-    elif hasattr(source, "meta") and hasattr(source.meta, "capture_dir"):
-        capture_dir = Path(source.meta.capture_dir)
-        for ext in (".mp4", ".mov", ".avi"):
-            candidates = list(capture_dir.glob(f"*{ext}"))
-            if candidates:
-                video_path = candidates[0]
-                break
-
-    if video_path is None or not video_path.exists():
-        warnings.append("video file not found; falling back to photo pipeline")
-        return build_photo_plan(source, config, book)
-
-    # Extract keyframes.
-    mark = time.perf_counter()
-    frames = extract_keyframes_from_video(
-        video_path,
-        stride=DEFAULT_STRIDE_FRAMES,
-        max_frames=DEFAULT_MAX_FRAMES,
-        blur_threshold=DEFAULT_BLUR_THRESHOLD,
-    )
-    timings["frame_extraction_s"] = time.perf_counter() - mark
-
-    if not frames:
-        raise ValueError("video produced no usable keyframes")
-
-    # Segment into rooms.
-    mark = time.perf_counter()
-    room_groups = _segment_rooms_by_scene_change(frames)
-    timings["room_segmentation_s"] = time.perf_counter() - mark
-    log.info("video: segmented %d frames into %d rooms", len(frames), len(room_groups))
-
-    # Build per-room plans using photo path.
-    weights_dir = Path(config.weights_dir) if hasattr(config, "weights_dir") else Path("weights")
-    rooms: list[Room] = []
-
-    for room_id, room_frames in room_groups.items():
-        from cozmo.pipeline.photo import _build_single_room_plan
-
-        mark = time.perf_counter()
-        room, room_timings = _build_single_room_plan(
-            room_id, room_frames, room_id, config, book, weights_dir
+    video_path = getattr(source, "video_path", None)
+    if video_path is None:
+        candidates = list(Path(source.meta.root).glob("*.mp4")) + list(
+            Path(source.meta.root).glob("*.mov")
         )
-        timings[f"{room_id}_s"] = time.perf_counter() - mark
-        rooms.append(room)
+        if not candidates:
+            raise ValueError("video tier needs a .mp4 or .mov in the capture directory")
+        video_path = candidates[0]
 
-    tier = Tier.VIDEO
-    total_floor = sum(r.floor_area.value for r in rooms)
-
-    # Video tier intervals are tighter than photo but wider than LiDAR.
-    video_sigma = 0.10  # 10% relative uncertainty
-    total_area_measure = Measure(
-        value=total_floor,
-        lo=total_floor * (1.0 - 2 * video_sigma),
-        hi=total_floor * (1.0 + 2 * video_sigma),
-        unit="m2",
+    numbers, images, stats = extract_keyframes(Path(video_path))
+    if not images:
+        raise ValueError(f"no usable frames extracted from {video_path}")
+    warnings.append(
+        f"video: {int(stats['frames_in_clip'])} frames in clip, "
+        f"{int(stats['frames_sampled'])} sampled, {int(stats.get('frames_kept', 0))} kept "
+        f"after blur rejection at the {BLUR_REJECT_FRACTION:.0%} quantile"
     )
 
-    quality = QualityReport(
-        tier=tier,
-        device_model=source.meta.device_model,
-        frames_available=source.meta.frame_count,
-        frames_used=len(frames),
-        median_depth_confidence=None,
-        surface_coverage=0.75,
-        low_light_fraction=0.0,
-        specular_fraction=0.0,
-        warnings=warnings,
-    )
+    backbone = get_backbone(Path(config.weights_dir))
+    height, width = images[0].shape[:2]
+    # A clip carries no EXIF, so the focal length comes from the device prior. The
+    # provenance is recorded because an assumed focal length is a scale error waiting to
+    # happen and the reader should know it was assumed.
+    k_full, focal_source = intrinsics_from_exif(None, width, height)
+    warnings.append(f"video intrinsics: {focal_source}")
 
-    calibration = CalibrationReport(
-        method=IntervalMethod.PROPAGATED,
-        nominal_coverage=book.coverage,
-        empirical_coverage={},
-        residual_quantiles={},
-        fitted_on="video_prior",
-    )
+    clouds: list[tuple[np.ndarray, np.ndarray]] = []
+    depths: list[np.ndarray] = []
+    gravities: list[np.ndarray] = []
+    scale_sources: list[str] = []
 
-    drift = DriftReport(
-        method="frame_to_frame:optical_flow",
-        loop_closures_found=0,
-        residual_before_m=0.0,
-        residual_after_m=0.0,
-        max_pose_correction_m=0.0,
-        footprint_area_before_m2=total_floor,
-        footprint_area_after_m2=total_floor,
-        applied=False,
-    )
+    for image in images:
+        predicted = backbone.estimate(image)
+        geometry = make_metric(
+            predicted, k_full, seed=config.seed, backbone_is_metric=backbone.is_metric()
+        )
+        points, normals = _cloud_from_depth(geometry.depth_m, k_full, geometry.gravity_rotation)
+        clouds.append((points, normals))
+        depths.append(geometry.depth_m)
+        gravities.append(geometry.gravity_rotation)
+        scale_sources.append(geometry.scale.source)
 
-    plan = PropertyPlan(
-        pipeline_version=__version__,
+    poses, registration_warnings = register_sequential(clouds)
+    warnings.extend(registration_warnings)
+
+    frames: list[Frame] = []
+    frame_images: dict[int, np.ndarray] = {}
+    for index, (pose, depth, gravity, image) in enumerate(zip(poses, depths, gravities, images)):
+        if pose is None:
+            continue
+        frames.append(
+            Frame(
+                index=index,
+                timestamp=float(numbers[index]),
+                k_depth=k_full,
+                k_rgb=k_full,
+                rgb_size=(width, height),
+                depth=depth,
+                depth_sigma=np.full(depth.shape, 0.25 * float(np.median(depth)), dtype=np.float32),
+                confidence=np.full(depth.shape, 2, dtype=np.uint8),
+                pose=pose @ make_pose(gravity, np.zeros(3)),
+                depth_provenance=Provenance.PREDICTED,
+                pose_provenance=Provenance.ESTIMATED,
+            )
+        )
+        frame_images[index] = image
+
+    if len(frames) < 4:
+        raise ValueError(
+            f"only {len(frames)} frames registered from {len(images)} keyframes; "
+            "the clip is too blurred or too fast to reconstruct"
+        )
+    warnings.append(f"video: {len(frames)} of {len(images)} keyframes registered")
+
+    posed = PosedFrameSource(
+        frames=frames,
         capture_id=source.meta.capture_id,
-        tier=tier,
-        created_at=datetime.now(timezone.utc),
-        rooms=rooms,
-        adjacency=[],
-        damage=[],
-        concealed_flags=[],
-        scope_items=[],
-        drift=drift,
-        calibration=calibration,
-        quality=quality,
-        total_floor_area=total_area_measure,
-        runtime_seconds=time.perf_counter() - started,
+        tier=Tier.VIDEO,
+        device_model=source.meta.device_model,
+        root=Path(source.meta.root),
+        images=frame_images,
+        notes={"video": str(video_path), "focal_source": focal_source},
     )
 
-    artifacts = PipelineArtifacts(
-        cloud=FusedCloud(
-            points=np.zeros((0, 3), dtype=np.float32),
-            normals=np.zeros((0, 3), dtype=np.float32),
-            colours=np.zeros((0, 3), dtype=np.uint8),
-            sigma=np.zeros(0, dtype=np.float32),
-            frame_ids=np.zeros(0, dtype=np.int32),
-        ),
-        cameras=np.zeros((0, 3)),
-        occupancy=None,  # type: ignore[arg-type]
-        complex=None,  # type: ignore[arg-type]
-        walls=[],
-        levels=LevelEstimate(
-            floor_height=0.0,
-            ceiling_height=2.40,
-            ceiling_method="video_prior",
-            warnings=[],
-        ),
-        world_rotation=np.eye(3),
-        keyframes=[],
-        warnings=warnings,
-        timings=timings,
-    )
-
-    return PipelineResult(plan=plan, artifacts=artifacts)
+    # Drift correction stays on: a walkthrough revisits places, which is precisely the
+    # condition loop closure needs and precisely what the photo tier lacks.
+    result = build_lidar_plan(posed, config, book)
+    result.plan.tier = Tier.VIDEO
+    result.plan.created_at = datetime.now(timezone.utc)
+    result.plan.quality.tier = Tier.VIDEO
+    result.plan.quality.warnings = list(result.plan.quality.warnings) + warnings
+    result.plan.runtime_seconds = time.perf_counter() - started
+    result.artifacts.warnings.extend(warnings)
+    _ = scale_sources
+    return result
