@@ -66,6 +66,9 @@ def run(
     voxel_size: float = typer.Option(
         0.05, "--voxel-size", help="Voxel size in metres for cloud fusion."
     ),
+    max_keyframes: Optional[int] = typer.Option(
+        None, "--max-keyframes", help="Maximum keyframes to subsample from large sequence."
+    ),
     verbose: bool = typer.Option(False, "--verbose", help="Enable verbose log output."),
 ) -> None:
     """Run full reconstruction pipeline on one capture directory."""
@@ -82,6 +85,8 @@ def run(
         voxel_m=voxel_size,
         drift_correction=drift_correction,
     )
+    if max_keyframes is not None:
+        config = config.with_overrides(max_keyframes=max_keyframes)
 
     console.print("[bold blue]Running 3D reconstruction and semantic extraction...[/bold blue]")
     result = reconstruct(source, config=config)
