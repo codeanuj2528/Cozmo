@@ -345,11 +345,3 @@ def build_video_plan(
     )
 
     return PipelineResult(plan=plan, artifacts=artifacts)
-
-
-def reconstruct(path: Path) -> PropertyPlan:
-    """Entry point for video tier reconstruction from a capture directory."""
-    from cozmo.io import load_capture
-    source = load_capture(path)
-    result = build_video_plan(source)
-    return result.plan

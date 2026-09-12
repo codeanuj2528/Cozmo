@@ -54,3 +54,12 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# NumPy on Apple's Accelerate BLAS raises these on matrix products whose inputs and
+# outputs are entirely finite; see src/cozmo/util/numpy_compat.py, which documents the
+# reproduction and is asserted by tests/test_numpy_compat.py. Filtered here as well
+# because pytest resets warning filters at startup, and the noise hides real warnings.
+filterwarnings = [
+    "ignore:divide by zero encountered in matmul:RuntimeWarning",
+    "ignore:overflow encountered in matmul:RuntimeWarning",
+    "ignore:invalid value encountered in matmul:RuntimeWarning",
+]

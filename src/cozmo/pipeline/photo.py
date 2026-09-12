@@ -438,11 +438,3 @@ def build_photo_plan(
     )
 
     return PipelineResult(plan=plan, artifacts=artifacts)
-
-
-def reconstruct(path: Path) -> PropertyPlan:
-    """Entry point for photo tier reconstruction from a capture directory."""
-    from cozmo.io import load_capture
-    source = load_capture(path)
-    result = build_photo_plan(source)
-    return result.plan

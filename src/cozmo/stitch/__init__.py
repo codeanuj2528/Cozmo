@@ -6,7 +6,8 @@ rooms must be placed in a common coordinate frame.  This package provides:
 
 - :mod:`~cozmo.stitch.graph` — pose graph construction and optimisation
 - :mod:`~cozmo.stitch.match` — feature matching between overlapping observations
-- :mod:`~cozmo.stitch.drift` — trajectory drift detection and correction
+Trajectory drift detection and correction lives in :mod:`cozmo.geometry.drift`,
+with the rest of the geometry it depends on.
 """
 
 from cozmo.stitch.graph import PoseGraph, optimise_pose_graph  # noqa: F401

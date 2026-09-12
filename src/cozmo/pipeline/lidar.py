@@ -232,7 +232,7 @@ def build_run_manifest(
 # ---------------------------------------------------------------------------
 
 
-def reconstruct(
+def build_lidar_plan(
     source: CaptureSource,
     config: PipelineConfig | None = None,
     book: IntervalBook | None = None,
@@ -380,6 +380,7 @@ def reconstruct(
     tier = source.meta.tier
     rooms: list[Room] = []
     lookups: dict[str, dict] = {}
+    room_mask_list: list[np.ndarray] = []
     ordered = sorted(polygons.items(), key=lambda kv: -kv[1].area)
     for ordinal, (room_key, polygon) in enumerate(ordered, start=1):
         room_id = f"room_{ordinal:02d}"
@@ -400,6 +401,7 @@ def reconstruct(
             geometry, runs, openings_by_wall, per_room, book, tier, observed
         )
         rooms.append(room)
+        room_mask_list.append(mask)
         lookups[room_id] = lookup
 
     adjacency = match_adjacency(rooms, lookups)
@@ -422,14 +424,32 @@ def reconstruct(
         fitted_on=book.source,
     )
 
-    from cozmo.damage.detect import detect_damage_regions
+    from cozmo.damage.detect import detect_damage_for_rooms
     from cozmo.damage.rules import RuleEngine
     from cozmo.scope.generate import generate_scope_items
 
+    mark = time.perf_counter()
     damage: list[DamageRegion] = []
-    for r in rooms:
-        surf_ids = [s.surface_id for s in r.surfaces if s.type.value == "wall"]
-        damage.extend(detect_damage_regions(r.room_id, surf_ids))
+    damage_detector, frames_examined = "disabled", 0
+    if config.detect_damage:
+        damage, damage_detector, frames_examined = detect_damage_for_rooms(
+            rooms=rooms,
+            source=source,
+            keyframes=keyframes,
+            camera_positions=cameras,
+            world_rotation=world_rotation,
+            room_masks={r.room_id: m for r, m in zip(rooms, room_mask_list)},
+            grid=occupancy.grid,
+            floor_y=levels.floor_height,
+            book=book,
+            tier=tier,
+            weights_dir=config.weights_dir,
+        )
+    timings["damage_s"] = time.perf_counter() - mark
+    warnings.append(
+        f"damage detector: {damage_detector}, {frames_examined} frames examined, "
+        f"{len(damage)} regions"
+    )
 
     rule_engine = RuleEngine()
     concealed_flags = rule_engine.evaluate_damage(damage)

@@ -92,10 +92,14 @@ def non_maximum_suppression(
     iou_threshold: float = DEFAULT_NMS_IOU_THRESHOLD,
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
 ) -> list[FrameDetection]:
-    """Apply NMS across all frames, then filter by confidence.
+    """Suppress duplicate detections of the same damage, per class, per frame.
 
-    This reduces duplicate detections of the same damage region seen in
-    multiple frames.
+    Suppression is within a class, never across classes. Two different kinds of damage
+    routinely occupy the same patch of wall -- a crack running through a water stain is the
+    textbook case, and it is one of the two-class combinations the benchmark stages
+    deliberately -- and they are repaired differently, scoped differently and priced
+    differently. Suppressing one because it overlaps the other does not merge two findings
+    into one, it deletes a line item from the repair scope and the loss is silent.
     """
     filtered = []
     for det in detections:
@@ -117,9 +121,12 @@ def non_maximum_suppression(
             for other in order:
                 if other == idx or suppressed[other]:
                     continue
+                if det.labels[other] != det.labels[idx]:
+                    continue
                 if _iou(det.bboxes[idx], det.bboxes[other]) > iou_threshold:
                     suppressed[other] = True
 
+        kept_indices.sort()
         if kept_indices:
             filtered.append(FrameDetection(
                 frame_idx=det.frame_idx,
