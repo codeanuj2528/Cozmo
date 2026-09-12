@@ -37,6 +37,7 @@ from cozmo.geometry.assemble import (
     total_area,
 )
 from cozmo.geometry.cellcomplex import CellComplex, build_cell_complex, room_masks, room_polygons
+from cozmo.geometry.drift import PoseOverride, correct_drift
 from cozmo.geometry.fusion import FusedCloud, fuse, select_keyframes
 from cozmo.geometry.levels import LevelEstimate, detect_levels, refine_gravity
 from cozmo.geometry.occupancy import OccupancyMaps, build_occupancy
@@ -46,6 +47,7 @@ from cozmo.geometry.walls import (
     dominant_directions,
     extract_wall_segments,
     merge_runs,
+    snap_to_frame,
 )
 from cozmo.io.base import CaptureSource
 from cozmo.schema import (
@@ -83,6 +85,34 @@ class PipelineResult:
     artifacts: PipelineArtifacts
 
 
+def _resync_candidates(candidates, walls):
+    """Rebuild the line set the cell complex uses from the possibly snapped walls.
+
+    One line per distinct (direction, offset), because several runs can share a plane and
+    the arrangement wants each line once.
+    """
+    from cozmo.geometry.walls import WallCandidate
+
+    seen: dict[tuple[int, int], WallCandidate] = {}
+    for wall in walls:
+        azimuth = int(round(np.degrees(np.arctan2(wall.normal_xz[1], wall.normal_xz[0])) / 2.0))
+        offset = float(wall.normal_xz @ wall.start)
+        key = (azimuth, int(round(offset / 0.05)))
+        existing = seen.get(key)
+        if existing is None or wall.support_weight > existing.weight:
+            seen[key] = WallCandidate(
+                plane=wall.plane,
+                normal_xz=wall.normal_xz,
+                offset=offset,
+                weight=wall.support_weight,
+                indices=wall.point_indices,
+                segments=[wall],
+            )
+    merged = list(seen.values())
+    merged.sort(key=lambda c: c.weight, reverse=True)
+    return merged or candidates
+
+
 def _frame_indices(source: CaptureSource, keyframes: list[int]) -> list[int]:
     """Frame numbers for the selected keyframes.
 
@@ -107,7 +137,6 @@ def reconstruct(
     source: CaptureSource,
     config: PipelineConfig | None = None,
     book: IntervalBook | None = None,
-    drift_hook=None,
 ) -> PipelineResult:
     """Run the full reconstruction for one capture."""
     config = config or PipelineConfig()
@@ -127,6 +156,29 @@ def reconstruct(
         rotation_rad=np.deg2rad(config.keyframe_rotation_deg),
         max_frames=config.max_keyframes,
     )
+
+    # Drift is corrected before fusion, not after. Correcting a fused cloud in place would
+    # apply one frame's delta to the contributions of every frame that shared its voxel.
+    drift = DriftReport(
+        method="not applied: drift correction disabled by configuration",
+        loop_closures_found=0,
+        residual_before_m=0.0,
+        residual_after_m=0.0,
+        max_pose_correction_m=0.0,
+        footprint_area_before_m2=0.0,
+        footprint_area_after_m2=0.0,
+        applied=False,
+    )
+    keyframe_poses = poses[keyframes]
+    if config.drift_correction:
+        solution = correct_drift(source, keyframes, poses, seed=config.seed)
+        drift = solution.report
+        if solution.report.applied:
+            source = PoseOverride(source, keyframes, solution.poses)
+            keyframe_poses = solution.poses
+    timings["drift_s"] = time.perf_counter() - mark
+
+    mark = time.perf_counter()
     cloud = fuse(
         source,
         keyframes,
@@ -142,22 +194,9 @@ def reconstruct(
     gravity_rotation, _, gravity_warnings = refine_gravity(cloud)
     warnings.extend(gravity_warnings)
     cloud = cloud.rotated(gravity_rotation)
-    cameras = poses[keyframes][:, :3, 3] @ gravity_rotation.T
+    cameras = keyframe_poses[:, :3, 3] @ gravity_rotation.T
     world_rotation = gravity_rotation
-
-    drift = DriftReport(
-        method="not applied",
-        loop_closures_found=0,
-        residual_before_m=0.0,
-        residual_after_m=0.0,
-        max_pose_correction_m=0.0,
-        footprint_area_before_m2=0.0,
-        footprint_area_after_m2=0.0,
-        applied=False,
-    )
-    if config.drift_correction and drift_hook is not None:
-        cloud, cameras, drift = drift_hook(source, keyframes, cloud, cameras, config)
-    timings["gravity_and_drift_s"] = time.perf_counter() - mark
+    timings["gravity_s"] = time.perf_counter() - mark
 
     mark = time.perf_counter()
     levels = detect_levels(cloud)
@@ -174,6 +213,24 @@ def reconstruct(
         walls, candidates = extract_wall_segments(cloud, levels.floor_height, levels.ceiling_height)
     else:
         _, candidates = extract_wall_segments(cloud, levels.floor_height, levels.ceiling_height)
+
+    snapped_count, snap_rotation = 0, 0.0
+    if config.snap_walls_to_frame and walls:
+        frame_angle = dominant_directions(walls)
+        walls, snapped_count, snap_rotation = snap_to_frame(
+            walls, cloud, frame_angle, tolerance_rad=np.deg2rad(config.snap_tolerance_deg)
+        )
+        for candidate in candidates:
+            candidate.segments = [s for s in walls if s.plane is candidate.plane]
+        # Candidate lines drive the cell complex, so they must move with the walls or the
+        # arrangement will be built from the pre-snap geometry and the rooms will not sit
+        # on their own walls.
+        candidates = _resync_candidates(candidates, walls)
+    if snapped_count:
+        warnings.append(
+            f"snapped {snapped_count} wall runs onto the building frame, "
+            f"mean rotation {np.degrees(snap_rotation):.2f} deg"
+        )
     timings["walls_s"] = time.perf_counter() - mark
 
     mark = time.perf_counter()
@@ -189,7 +246,11 @@ def reconstruct(
 
     mark = time.perf_counter()
     complex_ = build_cell_complex(occupancy, candidates, walls, max_lines=config.max_wall_lines)
-    polygons = room_polygons(complex_, min_room_area_m2=config.min_room_area_m2)
+    polygons = room_polygons(
+        complex_,
+        min_room_area_m2=config.min_room_area_m2,
+        min_inscribed_radius_m=config.min_inscribed_radius_m,
+    )
     masks = room_masks(complex_)
     timings["floorplan_s"] = time.perf_counter() - mark
 
@@ -235,6 +296,24 @@ def reconstruct(
         fitted_on=book.source,
     )
 
+    from cozmo.damage.detect import detect_damage_regions
+    from cozmo.damage.rules import RuleEngine
+    from cozmo.scope.generate import generate_scope_items
+
+    damage: list[DamageRegion] = []
+    for r in rooms:
+        surf_ids = [s.surface_id for s in r.surfaces if s.type.value == "wall"]
+        damage.extend(detect_damage_regions(r.room_id, surf_ids))
+
+    rule_engine = RuleEngine()
+    concealed_flags = rule_engine.evaluate_damage(damage)
+    scope_items = generate_scope_items(damage, concealed_flags)
+
+    footprint = float(sum(r.floor_area.value for r in rooms))
+    drift.footprint_area_after_m2 = footprint
+    if not drift.applied:
+        drift.footprint_area_before_m2 = footprint
+
     plan = PropertyPlan(
         pipeline_version=__version__,
         capture_id=source.meta.capture_id,
@@ -242,9 +321,9 @@ def reconstruct(
         created_at=datetime.now(timezone.utc),
         rooms=rooms,
         adjacency=adjacency,
-        damage=[],
-        concealed_flags=[],
-        scope_items=[],
+        damage=damage,
+        concealed_flags=concealed_flags,
+        scope_items=scope_items,
         drift=drift,
         calibration=calibration,
         quality=quality,

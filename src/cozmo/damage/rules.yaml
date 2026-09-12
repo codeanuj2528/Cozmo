@@ -1,0 +1,89 @@
+# Concealed-damage rules definition
+
+version: 1
+
+rules:
+  - id: CD-WATER-SUBFLOOR-01
+    text: >-
+      Water staining that reaches within 0.15 m of the floor implies moisture
+      has tracked down behind the wall finish into the floor junction. The
+      subfloor and the wall cavity below the visible stain are likely wet even
+      though nothing is visible there.
+    severity: high
+    probability: 0.72
+    recommended_action: >-
+      Moisture-meter the lower 0.6 m of the wall and the floor within 1 m of it.
+      Lift a floor covering sample at the wall junction if readings exceed 18% WME.
+    inspection_priority: 1
+    predicate:
+      all_of:
+        - {field: damage_class, op: in, value: [water_stain, stain, water]}
+        - {field: surface_kind, op: eq, value: wall}
+        - {field: min_height_above_floor_m, op: lte, value: 0.15}
+
+  - id: CD-MOULD-THERMAL-BRIDGE-01
+    text: >-
+      Mould on a ceiling within 0.5 m of an exterior corner is the signature of a
+      cold spot: either a thermal bridge at the wall/roof junction or water
+      ingress from above. The visible growth is the surface expression of a
+      cavity that stays damp.
+    severity: high
+    probability: 0.66
+    recommended_action: >-
+      Thermal-image the ceiling/wall junction from inside, and inspect the roof
+      void or the flat-roof membrane directly above this corner.
+    inspection_priority: 1
+    predicate:
+      all_of:
+        - {field: damage_class, op: in, value: [mold, mould]}
+        - {field: surface_kind, op: eq, value: ceiling}
+        - {field: distance_to_exterior_corner_m, op: lte, value: 0.50}
+
+  - id: CD-WATER-CEILING-ABOVE-01
+    text: >-
+      Water staining on a ceiling means the source is in the void above it. The
+      wetted area is characteristically larger than the stain, because the stain
+      marks only where water reached the finish and dried.
+    severity: high
+    probability: 0.80
+    recommended_action: >-
+      Inspect the void above this ceiling over an area at least twice the stain
+      extent, and trace services running through it.
+    inspection_priority: 1
+    predicate:
+      all_of:
+        - {field: damage_class, op: in, value: [water_stain, stain, water]}
+        - {field: surface_kind, op: eq, value: ceiling}
+
+  - id: CD-CRACK-STRUCTURAL-01
+    text: >-
+      A crack longer than 1.0 m that reaches the floor junction is unlikely to be
+      shrinkage alone. Movement of that length usually continues behind the
+      finish and into the substrate.
+    severity: medium
+    probability: 0.55
+    recommended_action: >-
+      Expose the crack ends, check for displacement across it, and re-inspect
+      after 4 weeks to establish whether it is live.
+    inspection_priority: 2
+    predicate:
+      all_of:
+        - {field: damage_class, op: eq, value: crack}
+        - {field: max_extent_m, op: gte, value: 1.00}
+        - {field: min_height_above_floor_m, op: lte, value: 0.30}
+
+  - id: CD-MISSING-CAVITY-01
+    text: >-
+      Missing wall material exposes the cavity directly. Whatever caused the loss
+      acted on the cavity too, and insulation and services behind the opening
+      cannot be assumed intact.
+    severity: medium
+    probability: 0.85
+    recommended_action: >-
+      Inspect the cavity through the existing opening before closing it, and
+      check insulation continuity and any services crossing the void.
+    inspection_priority: 2
+    predicate:
+      all_of:
+        - {field: damage_class, op: in, value: [missing_material, impact_damage]}
+        - {field: area_m2, op: gte, value: 0.05}
