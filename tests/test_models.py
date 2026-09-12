@@ -1,4 +1,4 @@
-"""Tests for neural model loader wrappers (ZoeDepth, Grounding DINO, SAM 2)."""
+"""Tests for neural model loader wrappers (ZoeDepth, Grounding DINO, SAM 2, VGGT, LightGlue)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from cozmo.models import (
     load_zoedepth_model,
     load_grounding_dino_model,
     load_sam2_model,
+    load_vggt_model,
+    load_lightglue_model,
     estimate_neural_metric_depth,
     detect_open_vocabulary,
 )
@@ -26,6 +28,14 @@ def test_model_availability_checks():
     avail_sam, msg_sam = load_sam2_model(Path("non_existent_weights"))
     assert not avail_sam
     assert "SAM 2 weights not found" in msg_sam
+
+    avail_vggt, msg_vggt = load_vggt_model(Path("non_existent_weights"))
+    assert not avail_vggt
+    assert "VGGT weights not found" in msg_vggt
+
+    avail_lg, msg_lg = load_lightglue_model(Path("non_existent_weights"))
+    assert not avail_lg
+    assert "LightGlue weights not found" in msg_lg
 
 
 def test_estimate_neural_metric_depth_fallback():

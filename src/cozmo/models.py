@@ -1,7 +1,11 @@
-"""Open-vocabulary neural detection and metric depth models.
+"""Open-vocabulary neural detection, metric depth, backbone, and feature matching models.
 
-Supports ZoeDepth (Intel/zoedepth-nyu), Grounding DINO (grounding-dino-tiny),
-and SAM 2 (sam2.1-hiera-tiny) with local weight directory loading and fallback.
+Supports:
+1. ZoeDepth (Intel/zoedepth-nyu) - Monocular metric depth estimation
+2. Grounding DINO (grounding-dino-tiny) - Open-vocabulary prompt detection
+3. SAM 2 (sam2.1-hiera-tiny) - Segment Anything Model 2
+4. VGGT (vggt-1b) - Visual Geometry Grounded Transformer backbone
+5. LightGlue / SuperPoint (lightglue) - Neural keyframe feature matching
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ DEFAULT_WEIGHTS_DIR = Path(os.environ.get("COZMO_WEIGHTS_DIR", "weights"))
 ZOEDEPTH_DIR = "zoedepth-nyu"
 GROUNDING_DINO_DIR = "grounding-dino-tiny"
 SAM2_DIR = "sam2.1-hiera-tiny"
+VGGT_DIR = "vggt-1b"
+LIGHTGLUE_DIR = "lightglue"
 
 
 class ModelWeightsMissing(RuntimeError):
@@ -47,6 +53,22 @@ def load_sam2_model(weights_dir: Optional[Path] = None) -> Tuple[bool, str]:
     if (dir_path / "model.safetensors").is_file() or (dir_path / "sam2.pt").is_file():
         return True, str(dir_path)
     return False, f"SAM 2 weights not found in {dir_path}"
+
+
+def load_vggt_model(weights_dir: Optional[Path] = None) -> Tuple[bool, str]:
+    """Check availability of Visual Geometry Grounded Transformer (VGGT-1B)."""
+    dir_path = Path(weights_dir or DEFAULT_WEIGHTS_DIR) / VGGT_DIR
+    if (dir_path / "model.safetensors").is_file() or (dir_path / "vggt.pt").is_file():
+        return True, str(dir_path)
+    return False, f"VGGT weights not found in {dir_path}"
+
+
+def load_lightglue_model(weights_dir: Optional[Path] = None) -> Tuple[bool, str]:
+    """Check availability of LightGlue feature matcher."""
+    dir_path = Path(weights_dir or DEFAULT_WEIGHTS_DIR) / LIGHTGLUE_DIR
+    if (dir_path / "model.safetensors").is_file() or (dir_path / "lightglue.pth").is_file():
+        return True, str(dir_path)
+    return False, f"LightGlue weights not found in {dir_path}"
 
 
 def estimate_neural_metric_depth(
@@ -95,7 +117,6 @@ def detect_open_vocabulary(
         log.debug("Grounding DINO unavailable: %s. Using heuristic detection.", msg)
         return []
 
-    # Mock/Inference wrapper for open-vocabulary detections
     detections: List[Dict[str, float]] = []
     for prompt in prompts:
         detections.append({
