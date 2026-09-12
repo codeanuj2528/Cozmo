@@ -1,9 +1,23 @@
-"""Tests for benchmark evaluation engine."""
+"""Tests for the gate scorer.
+
+This file replaces one that imported `cozmo.bench.score` and asserted
+`report.passed_all` on a plan it had no ground truth for. That module invented its own
+truth -- ceiling truth was the plan's own value times 0.996, repeatability was the constant
+0.70 cm, the photo-stitch error was the constant 3.2% -- so the assertion it made was that
+a scorer which cannot fail does not fail. Both the module and the assertion are gone.
+
+What is tested instead is the property the benchmark actually depends on: with no ground
+truth, every accuracy gate reports SKIP, and none of them reports PASS. A gate that passes
+for lack of evidence is the one defect in a benchmark that makes every other number in it
+worthless, so it is worth a test.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from cozmo.bench.score import evaluate_plan
+
+from cozmo.bench.gates import Status, score_capture
+from cozmo.bench.groundtruth import GroundTruth
 from cozmo.schema import (
     CalibrationReport,
     DriftReport,
@@ -16,8 +30,8 @@ from cozmo.schema import (
 )
 
 
-def test_evaluate_plan():
-    plan = PropertyPlan(
+def _plan(**overrides) -> PropertyPlan:
+    fields = dict(
         pipeline_version="0.1.0",
         capture_id="test_cap",
         tier=Tier.LIDAR,
@@ -41,7 +55,7 @@ def test_evaluate_plan():
         concealed_flags=[],
         scope_items=[],
         drift=DriftReport(
-            method="loop_closure",
+            method="keyframe pose graph, ICP-verified loop closures",
             loop_closures_found=2,
             residual_before_m=0.08,
             residual_after_m=0.01,
@@ -71,7 +85,44 @@ def test_evaluate_plan():
         total_floor_area=Measure(value=12.0, lo=11.5, hi=12.5, unit="m2"),
         runtime_seconds=1.5,
     )
+    fields.update(overrides)
+    return PropertyPlan(**fields)
 
-    report = evaluate_plan(plan)
-    assert report.passed_all
-    assert len(report.gates) == 5
+
+def test_no_ground_truth_never_passes_an_accuracy_gate():
+    results = score_capture(_plan(), GroundTruth(records=[]), "test_cap")
+
+    accuracy_gates = {
+        "wall_lengths",
+        "ceiling_height",
+        "opening_widths",
+        "footprint",
+        "interval_coverage",
+        "adjacency",
+    }
+    scored = {r.gate: r for r in results}
+    assert accuracy_gates <= set(scored), "a gate disappeared from the scorer"
+
+    for name in accuracy_gates:
+        assert scored[name].status is Status.SKIP, (
+            f"{name} returned {scored[name].status} with no ground truth; "
+            "a gate must never pass for lack of evidence"
+        )
+
+
+def test_drift_gate_fails_when_poses_are_used_as_is():
+    """The brief makes this an automatic fail, so it is asserted rather than assumed."""
+    as_is = _plan(
+        drift=DriftReport(
+            method="not applied: drift correction disabled by configuration",
+            loop_closures_found=0,
+            residual_before_m=0.0,
+            residual_after_m=0.0,
+            max_pose_correction_m=0.0,
+            footprint_area_before_m2=12.0,
+            footprint_area_after_m2=12.0,
+            applied=False,
+        )
+    )
+    scored = {r.gate: r for r in score_capture(as_is, GroundTruth(records=[]), "test_cap")}
+    assert scored["drift_accountability"].status is Status.FAIL

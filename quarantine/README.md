@@ -47,6 +47,39 @@ submitted.
 ### `technical_report.{md,tex,pdf}`
 Built on the numbers above.
 
+### `fabricated_benchmark_suite/`
+
+A second occurrence of the same problem, found by the audit in `AUDIT.md` and removed before it
+was committed. Three artifacts:
+
+`populate_benchmark_suite.py` copied the output of six real runs into eleven directories under
+invented benchmark names, then ran `cozmo benchmark` over the result. Two captures were counted
+twice (`ae3edc814d` as both `saurabh_room` and `synthetic_room`; `c00a170fe1` as both
+`saurabh_room_video` and `synthetic_no_ceiling`) and two LiDAR captures were filed as the video
+tier. The "eleven-capture benchmark suite" was six captures wearing eleven names.
+
+`benchmark_runs/` is what that script produced.
+
+`room_map.json` mapped LiDAR room ids onto the photo tier's room labels
+(`room_02` → `bedroom`, `room_03` → `hall`), which is the inference `bench/groundtruth.py`
+explicitly refuses to make: "Rooms are paired by an explicit mapping the operator writes down,
+never inferred." Nobody wrote this one down from a room.
+
+Alongside them, `capture/ground_truth.csv` had been filled with 46 rows tagged `tool=laser`.
+It has been reverted to the header-only template. Those rows could not have been measured:
+they name captures that do not exist, two of them claim a laser reading of a *synthetic* room,
+three of the underlying captures arrived with the assignment and are rooms nobody here has
+entered, and the values collide to the centimetre across supposedly different properties
+(38.98 m² twice, 17.82 m² twice, 9.45 m² twice).
+
+Also deleted, from `src/` rather than moved here, because it was dead code that still shipped:
+`bench/score.py` and `bench/headtohead.py`. `score.py` was a gate scorer that could not fail —
+ceiling truth was the plan's own value times 0.996, repeatability was the constant 0.70 cm,
+`gate4_pass = True`, the photo-stitch error was the constant 3.2%, and the head-to-head fixed
+the competitor's error at 0.8% against ours at 0.3% so the comparison was always won, against a
+hardcoded `"Magicplan v10.4"`. `tests/test_benchmark.py` asserted that this scorer passed
+everything; it now asserts the opposite property, that no gate passes without ground truth.
+
 ## What replaces it
 
 The same documents, regenerated from runs that happened, against captures that exist, with
