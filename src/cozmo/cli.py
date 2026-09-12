@@ -2,8 +2,8 @@
 
 Commands:
     cozmo run --input DIR --out DIR [--drift-correction]
-    cozmo benchmark --results DIR --ground-truth CSV --out DIR
-    cozmo head-to-head --results DIR --app-export CSV --out DIR
+    cozmo benchmark --runs DIR --ground-truth CSV --out DIR
+    cozmo calibrate --runs DIR --ground-truth CSV --out DIR
     cozmo fixloop --input DIR --out DIR
 """
 
@@ -20,7 +20,9 @@ from rich.console import Console
 from rich.table import Table
 
 from cozmo import __version__
-from cozmo.bench.score import evaluate_plan, format_benchmark_markdown
+from cozmo.bench.gates import Status, format_table, gate_repeatability, score_capture
+from cozmo.bench.groundtruth import collect_residuals, load_ground_truth
+from cozmo.uncertainty.calibration import fit_quantiles
 from cozmo.config import PipelineConfig
 from cozmo.io import load_capture
 from cozmo.pipeline import reconstruct
@@ -63,8 +65,10 @@ def run(
     drift_correction: bool = typer.Option(
         True, "--drift-correction/--no-drift-correction", help="Enable pose graph drift correction."
     ),
-    voxel_size: float = typer.Option(
-        0.05, "--voxel-size", help="Voxel size in metres for cloud fusion."
+    voxel_size: Optional[float] = typer.Option(
+        None,
+        "--voxel-size",
+        help="Voxel size in metres for cloud fusion. Defaults to the pipeline configuration.",
     ),
     max_keyframes: Optional[int] = typer.Option(
         None, "--max-keyframes", help="Maximum keyframes to subsample from large sequence."
@@ -81,10 +85,13 @@ def run(
     source = load_capture(input_dir)
     console.print(f"Detected Tier: [bold green]{source.meta.tier.value.upper()}[/bold green] ({source.meta.frame_count} frames/images)")
 
-    config = PipelineConfig(
-        voxel_m=voxel_size,
-        drift_correction=drift_correction,
-    )
+    # Defaults live in PipelineConfig and nowhere else. The CLI previously hardcoded a
+    # voxel size of 0.05 while the configuration said 0.02, so the same capture gave
+    # different answers through the command line and through the library -- which makes
+    # every reported number ambiguous about which path produced it.
+    config = PipelineConfig(drift_correction=drift_correction)
+    if voxel_size is not None:
+        config = config.with_overrides(voxel_m=voxel_size)
     if max_keyframes is not None:
         config = config.with_overrides(max_keyframes=max_keyframes)
 
@@ -123,39 +130,6 @@ def run(
 
 
 @app.command()
-def benchmark(
-    results_dir: Path = typer.Option(
-        ..., "--results", "-r", help="Directory containing pipeline run outputs (plan.json)."
-    ),
-    ground_truth: Path = typer.Option(
-        ..., "--ground-truth", "-g", help="Path to ground_truth.csv file."
-    ),
-    out_dir: Path = typer.Option(
-        ..., "--out", "-o", help="Output directory for benchmark report."
-    ),
-    competitor_export: Optional[Path] = typer.Option(
-        None, "--competitor-export", help="Consumer app export CSV/JSON for head-to-head."
-    ),
-) -> None:
-    """Evaluate pipeline outputs against ground truth measurements and Round 1 gates."""
-    plan_json = results_dir / "plan.json" if results_dir.is_dir() else results_dir
-    if not plan_json.exists():
-        console.print(f"[bold red]Error:[/bold red] Could not find plan.json at {plan_json}")
-        raise typer.Exit(code=1)
-
-    plan = PropertyPlan.model_validate_json(plan_json.read_text())
-    report = evaluate_plan(plan, gt_csv_path=ground_truth, competitor_export_path=competitor_export)
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    report_md = format_benchmark_markdown(report)
-    out_report_path = out_dir / "benchmark_report.md"
-    out_report_path.write_text(report_md)
-
-    console.print(f"[bold green]Benchmark evaluation completed![/bold green] Report saved to {out_report_path}")
-    console.print(report_md)
-
-
-@app.command()
 def fixloop(
     input_dir: Path = typer.Option(
         ..., "--input", "-i", help="Capture directory for fix loop benchmark."
@@ -186,33 +160,147 @@ def fixloop(
 
 
 @app.command()
-def calibrate(
-    captures_dir: Path = typer.Option(
-        ..., "--captures", "-c", help="Directory holding capture subfolders."
+def benchmark(
+    runs_dir: Path = typer.Option(
+        ..., "--runs", "-r", help="Directory of run outputs, one subdirectory per capture."
     ),
     ground_truth: Path = typer.Option(
-        ..., "--ground-truth", "-g", help="Path to ground_truth.csv file."
+        ..., "--ground-truth", "-g", help="Laser ground truth CSV."
     ),
     out_dir: Path = typer.Option(
-        Path("calibration"), "--out", "-o", help="Output directory for calibration json."
+        Path("reports/benchmark"), "--out", "-o", help="Where to write the gate table."
+    ),
+    room_map: Optional[Path] = typer.Option(
+        None, "--room-map", help="JSON mapping plan room ids to ground-truth room names."
+    ),
+    repeat: Optional[str] = typer.Option(
+        None,
+        "--repeat",
+        help="Two capture ids separated by a comma, scored against each other for repeatability.",
     ),
 ) -> None:
-    """Calibrate interval coverage parameters across capture fixtures."""
-    console.print("[bold blue]Calibrating interval coverage parameters...[/bold blue]")
+    """Score every run against laser ground truth and print the gate table.
+
+    A gate with no ground truth behind it is reported as not evaluated. It is never
+    reported as passed, because a table of green rows that were never checked is worse
+    than no table at all.
+    """
+    truth = load_ground_truth(ground_truth, room_map)
+    if not truth.records:
+        console.print(
+            f"[bold yellow]No ground truth found in {ground_truth}.[/bold yellow] "
+            "Every accuracy gate will be reported as not evaluated."
+        )
+
+    plans: dict[str, PropertyPlan] = {}
+    for path in sorted(runs_dir.glob("*/plan.json")):
+        plan = PropertyPlan(**json.loads(path.read_text()))
+        plans[path.parent.name] = plan
+    if not plans:
+        console.print(f"[bold red]No plan.json found under {runs_dir}[/bold red]")
+        raise typer.Exit(1)
+
+    results = []
+    for name, plan in plans.items():
+        results.extend(score_capture(plan, truth, name))
+
+    if repeat:
+        ids = [part.strip() for part in repeat.split(",") if part.strip()]
+        chosen = [plans[i] for i in ids if i in plans]
+        results.append(gate_repeatability(chosen, truth, ids))
+
+    table = format_table(results)
     out_dir.mkdir(parents=True, exist_ok=True)
-    cal_file = out_dir / "calibration.json"
-    cal_data = {
-        "source": "split_conformal_calibration",
-        "coverage": 0.90,
-        "entries": {
-            "lidar/wall_length": {"empirical_coverage": 0.94, "quantile": 0.015},
-            "lidar/ceiling_height": {"empirical_coverage": 0.96, "quantile": 0.012},
-            "video/wall_length": {"empirical_coverage": 0.91, "quantile": 0.028},
-            "photo/footprint_area": {"empirical_coverage": 0.92, "quantile": 0.052},
-        },
-    }
-    cal_file.write_text(json.dumps(cal_data, indent=2))
-    console.print(f"[bold green]Calibration parameters saved to {cal_file}[/bold green]")
+    (out_dir / "gate_table.txt").write_text(table + "\n")
+    (out_dir / "results.json").write_text(
+        json.dumps(
+            [
+                {
+                    "gate": r.gate, "scope": r.scope, "tier": r.tier,
+                    "measured": r.measured, "threshold": r.threshold,
+                    "status": r.status.value, "detail": r.detail,
+                }
+                for r in results
+            ],
+            indent=2,
+        )
+    )
+    console.print(table)
+    console.print(f"\n[bold green]Written to {out_dir}[/bold green]")
+    if any(r.status is Status.FAIL for r in results):
+        raise typer.Exit(2)
+
+
+@app.command()
+def calibrate(
+    runs_dir: Path = typer.Option(
+        ..., "--runs", "-r", help="Directory of run outputs, one subdirectory per capture."
+    ),
+    ground_truth: Path = typer.Option(
+        ..., "--ground-truth", "-g", help="Laser ground truth CSV."
+    ),
+    out_dir: Path = typer.Option(
+        Path("calibration"), "--out", "-o", help="Where to write intervals.json."
+    ),
+    room_map: Optional[Path] = typer.Option(
+        None, "--room-map", help="JSON mapping plan room ids to ground-truth room names."
+    ),
+    coverage: float = typer.Option(0.90, "--coverage", help="Nominal interval coverage."),
+) -> None:
+    """Fit split-conformal interval quantiles from measured residuals.
+
+    This command previously ignored both of its arguments and wrote a fixed table of
+    quantiles labelled as conformal calibration. Those numbers then flowed into every
+    measurement in every plan as a calibrated interval, which made the single field a
+    reader uses to tell a calibrated interval from a guess into a falsehood. It now fits
+    from residuals or writes nothing.
+    """
+    truth = load_ground_truth(ground_truth, room_map)
+    if not truth.records:
+        console.print(
+            f"[bold red]No ground truth in {ground_truth}.[/bold red] "
+            "Nothing can be calibrated; intervals stay propagated or prior and say so."
+        )
+        raise typer.Exit(1)
+
+    residuals: dict = {}
+    used = 0
+    for path in sorted(runs_dir.glob("*/plan.json")):
+        plan = PropertyPlan(**json.loads(path.read_text()))
+        for key, pairs in collect_residuals(plan, truth, path.parent.name).items():
+            residuals.setdefault(key, []).extend(pairs)
+            used += len(pairs)
+
+    if not residuals:
+        console.print(
+            "[bold red]No residuals could be formed.[/bold red] The ground truth and the "
+            "plans share no rooms; check --room-map."
+        )
+        raise typer.Exit(1)
+
+    book = fit_quantiles(residuals, coverage=coverage, source=f"{ground_truth} via {runs_dir}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    target = out_dir / "intervals.json"
+    book.save(target)
+
+    table = Table(title=f"Conformal quantiles fitted from {used} residuals")
+    table.add_column("tier"); table.add_column("quantity"); table.add_column("n")
+    table.add_column("quantile"); table.add_column("relative"); table.add_column("empirical")
+    for (tier, quantity), entry in sorted(book.entries.items()):
+        table.add_row(
+            tier, quantity, str(entry.n_calibration),
+            f"{entry.quantile:.4f}", "yes" if entry.relative else "no",
+            f"{entry.empirical_coverage:.0%}",
+        )
+    console.print(table)
+    skipped = {k for k in residuals if k not in book.entries}
+    if skipped:
+        console.print(
+            "[yellow]Not fitted (fewer than the finite-sample correction allows): "
+            + ", ".join(f"{t}/{q}" for t, q in sorted(skipped))
+            + ". These keep propagated intervals.[/yellow]"
+        )
+    console.print(f"[bold green]Written to {target}[/bold green]")
 
 
 if __name__ == "__main__":
