@@ -61,11 +61,28 @@ log = logging.getLogger(__name__)
 ASSUMED_CAMERA_HEIGHT_M = 1.40
 CAMERA_HEIGHT_SIGMA_M = 0.14
 
-# The camera-height correction is trusted only when it broadly agrees with the metric
-# model. Outside this band the floor detection is more likely to have locked onto a bed,
-# a table or a countertop than onto the floor, and applying it then is actively harmful.
-SCALE_CORRECTION_MIN = 0.75
-SCALE_CORRECTION_MAX = 1.35
+# The camera-height correction is bounded only to reject a floor estimate that is
+# physically impossible, not to keep it near the model's own answer.
+#
+# The band was [0.75, 1.35] and that was wrong. It was set while the intrinsics were being
+# read from the wrong EXIF IFD, which distorted the cloud and made the floor fit unreliable,
+# so keeping the correction near 1.0 was protective. With intrinsics correct the prior
+# became both consistent and large: across the benchmark photographs it implies a camera
+# height of 2.50-2.90 m where the operator held the phone at about 1.45 m, a correction
+# near 0.57 -- and the old band rejected every one of them.
+#
+# The size is not a surprise once stated. A metric monocular model infers depth from
+# apparent size, which requires an assumed focal length, and Depth Anything V2 Metric Indoor
+# is trained on normal-field-of-view indoor imagery. These photographs are 0.5x ultra-wide
+# at 88 degrees, well outside that, and the model over-predicts depth by about 1.76x as a
+# result -- independently corroborated at 1.57x against LiDAR depth on the same property.
+# Rejecting the correction meant shipping that factor straight into the floor area.
+#
+# The remaining bounds only exclude the physically absurd: a phone is not held at 30 cm and
+# not at 4 m.
+SCALE_CORRECTION_MIN = 0.25
+SCALE_CORRECTION_MAX = 4.0
+PLAUSIBLE_CAMERA_HEIGHT_M = (0.6, 2.4)
 
 # 35 mm film is 36 mm wide. This is the definition of "35 mm equivalent focal length",
 # not an approximation.
@@ -94,29 +111,65 @@ class FrameGeometry:
     floor_found: bool
 
 
+# EXIF stores the photographic tags in a sub-IFD that IFD0 merely points at. Pillow's
+# `getexif()` returns IFD0, so a lookup for a focal length there finds nothing on an iPhone
+# JPEG and silently falls through to whatever default follows.
+EXIF_SUB_IFD = 0x8769
+
+
+def _focal_from_exif(path: Optional[Path]) -> tuple[float | None, str]:
+    """The 35 mm equivalent focal length, and where it was found.
+
+    The sub-IFD is checked first because that is where it actually is. Reading only IFD0
+    cost this pipeline a factor of 1.86 on every photo-tier frame: all 58 photographs of the
+    benchmark property carry `FocalLengthIn35mmFilm = 14`, taken on the 0.5x ultra-wide, and
+    none of them was ever read, so every frame ran at the 26 mm main-camera prior.
+
+    That error does not appear as a clean scale factor in the output. Back-projection is
+    `X = (u - cx) Z / fx` with Z from the depth model and untouched by fx, so too long a
+    focal length compresses the cloud laterally while leaving depth alone. The result is an
+    anisotropic distortion rather than a similarity: the floor stops being planar, the floor
+    fit that recovers camera height is then fitted to a curved surface, and the scale
+    correction computed from that height is wrong in its own right. The 1.86 became +422% on
+    the whole-property footprint by compounding through those three stages.
+
+    Returning the provenance rather than logging it matters for the same reason the
+    interval method does: a measured focal length and an assumed one carry very different
+    uncertainty, and the plan should say which it had.
+    """
+    if path is None:
+        return None, "no_file"
+    try:
+        from PIL import Image
+        from PIL.ExifTags import TAGS
+    except ImportError:
+        return None, "pillow_unavailable"
+
+    try:
+        with Image.open(path) as image:
+            base = image.getexif()
+            if not base:
+                return None, "no_exif"
+            for ifd, label in ((base.get_ifd(EXIF_SUB_IFD), "exif_sub_ifd"), (base, "exif_ifd0")):
+                if not ifd:
+                    continue
+                tags = {TAGS.get(k, k): v for k, v in ifd.items()}
+                value = tags.get("FocalLengthIn35mmFilm")
+                if value:
+                    return float(value), f"{label}_35mm_equivalent"
+    except Exception as exc:
+        log.debug("EXIF unreadable for %s: %s", path, exc)
+        return None, "exif_unreadable"
+    return None, "exif_has_no_focal_length"
+
+
 def intrinsics_from_exif(path: Optional[Path], width: int, height: int) -> tuple[np.ndarray, str]:
     """Pinhole intrinsics for a still, from EXIF where available.
 
     Returns the matrix and the provenance of the focal length, because a focal length that
     was assumed and one that was read carry different uncertainty and the plan says which.
     """
-    equivalent_mm = None
-    if path is not None:
-        try:
-            from PIL import Image
-            from PIL.ExifTags import TAGS
-
-            with Image.open(path) as image:
-                exif = image.getexif()
-                if exif:
-                    tags = {TAGS.get(k, k): v for k, v in exif.items()}
-                    value = tags.get("FocalLengthIn35mmFilm")
-                    if value:
-                        equivalent_mm = float(value)
-        except Exception as exc:
-            log.debug("EXIF unavailable for %s: %s", path, exc)
-
-    source = "exif_35mm_equivalent"
+    equivalent_mm, source = _focal_from_exif(path)
     if not equivalent_mm or equivalent_mm <= 0:
         equivalent_mm = DEFAULT_EQUIVALENT_FOCAL_MM
         source = "assumed_iphone_main_camera"
@@ -226,14 +279,11 @@ def recover_scale(
 
     factor = ASSUMED_CAMERA_HEIGHT_M / measured_camera_height
 
-    if backbone_is_metric and not (SCALE_CORRECTION_MIN <= factor <= SCALE_CORRECTION_MAX):
-        # The floor estimate and the metric model disagree by more than either's
-        # uncertainty can explain, so one of them is wrong about what the floor is. The
-        # model is the safer of the two to trust, and the disagreement is recorded.
+    if not (SCALE_CORRECTION_MIN <= factor <= SCALE_CORRECTION_MAX):
         return ScaleEstimate(
             factor=1.0,
-            source=f"model_metric_floor_disagreed_{factor:.2f}",
-            relative_uncertainty=0.30,
+            source=f"floor_implausible_correction_{factor:.2f}",
+            relative_uncertainty=0.35,
         )
 
     return ScaleEstimate(

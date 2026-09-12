@@ -63,6 +63,22 @@ log = logging.getLogger(__name__)
 WORKING_WIDTH = 320
 MAX_IMAGES_PER_ROOM = 8
 
+# A reconstructed room has to be a room. These bounds do not encode what a nice room looks
+# like; they encode what a dwelling cannot be, and a reconstruction outside them is not a
+# wide estimate but a wrong one.
+#
+# This guard exists because the photo tier reported a 113 m2 bedroom and a 4.36 m ceiling in
+# a flat whose LiDAR reconstruction measures 27.20 m2 total with 2.49-2.68 m ceilings.
+# Publishing that with a wide interval attached would still be publishing it. The brief is
+# explicit that confident garbage on thin input caps the total score, and a number that is
+# wrong by a factor of ten is not rescued by admitting it might be wrong by a factor of two.
+#
+# A room failing this is dropped and the reason recorded, so the plan reports fewer rooms
+# rather than absurd ones. That costs coverage, which is the correct thing to pay.
+PLAUSIBLE_CEILING_M = (1.80, 4.20)
+PLAUSIBLE_ROOM_AREA_M2 = (1.0, 60.0)
+PLAUSIBLE_ROOM_SPAN_M = 14.0
+
 
 @dataclass
 class RoomReconstruction:
@@ -110,6 +126,7 @@ def build_room_frames(
 
     clouds: list[tuple[np.ndarray, np.ndarray]] = []
     per_image: list[dict] = []
+    pending: list[dict] = []
 
     for path, full, small in loaded:
         k_full, focal_source = intrinsics_from_exif(path, full.shape[1], full.shape[0])
@@ -121,21 +138,63 @@ def build_room_frames(
             predicted, k_small, seed=config.seed, backbone_is_metric=backbone.is_metric()
         )
         scale_sources.append(geometry.scale.source)
-
-        points, normals = _cloud_from_depth(geometry.depth_m, k_small, geometry.gravity_rotation)
-        if len(points) < 300:
-            warnings.append(f"{path.name}: too few depth points to use")
-            continue
-        clouds.append((points, normals))
-        per_image.append(
+        pending.append(
             {
                 "path": path,
                 "full": full,
                 "small": small,
                 "k_small": k_small,
-                "depth": geometry.depth_m,
-                "gravity": geometry.gravity_rotation,
+                "geometry": geometry,
                 "focal_source": focal_source,
+            }
+        )
+
+    if not pending:
+        return [], {}, scale_sources, warnings + ["no image produced usable geometry"]
+
+    # One room has one scale. Most photographs of a room do not show enough floor for the
+    # camera-height prior to fire -- on the benchmark set it fires on three photographs in
+    # twenty, because the operator was also asked to shoot the ceiling. But the scale it
+    # recovers is a property of the camera and the depth model, not of the individual
+    # photograph, so the photographs that did see the floor can speak for the ones that did
+    # not. Taking the median makes one bad floor fit harmless.
+    confident = [
+        e["geometry"].scale.factor
+        for e in pending
+        if e["geometry"].floor_found and e["geometry"].scale.source == "camera_height_correction"
+    ]
+    room_scale = float(np.median(confident)) if confident else None
+    if room_scale is not None:
+        warnings.append(
+            f"room scale {room_scale:.3f} from {len(confident)} of {len(pending)} photographs "
+            f"that showed enough floor; applied to all"
+        )
+    else:
+        warnings.append(
+            f"no photograph in this room showed enough floor to recover scale; "
+            f"the depth model's own metric output is used and intervals widen"
+        )
+
+    for entry in pending:
+        geometry = entry["geometry"]
+        depth = geometry.depth_m
+        if room_scale is not None and geometry.scale.source != "camera_height_correction":
+            # Re-scale an image that could not recover its own scale onto the room's.
+            depth = depth * (room_scale / max(geometry.scale.factor, 1e-6))
+        points, normals = _cloud_from_depth(depth, entry["k_small"], geometry.gravity_rotation)
+        if len(points) < 300:
+            warnings.append(f"{entry['path'].name}: too few depth points to use")
+            continue
+        clouds.append((points, normals))
+        per_image.append(
+            {
+                "path": entry["path"],
+                "full": entry["full"],
+                "small": entry["small"],
+                "k_small": entry["k_small"],
+                "depth": depth,
+                "gravity": geometry.gravity_rotation,
+                "focal_source": entry["focal_source"],
                 "scale": geometry.scale,
             }
         )
@@ -213,6 +272,24 @@ def _cloud_from_depth(
     return points @ gravity.T, vectors @ gravity.T
 
 
+def _implausible(room) -> str | None:
+    """Why this reconstruction cannot be a room, or None if it could be."""
+    area = room.floor_area.value
+    if not (PLAUSIBLE_ROOM_AREA_M2[0] <= area <= PLAUSIBLE_ROOM_AREA_M2[1]):
+        return f"floor area {area:.1f} m2 outside {PLAUSIBLE_ROOM_AREA_M2[0]:.0f}-{PLAUSIBLE_ROOM_AREA_M2[1]:.0f} m2"
+
+    height = room.ceiling_height.value
+    if height > 0 and not (PLAUSIBLE_CEILING_M[0] <= height <= PLAUSIBLE_CEILING_M[1]):
+        return f"ceiling height {height:.2f} m outside {PLAUSIBLE_CEILING_M[0]:.1f}-{PLAUSIBLE_CEILING_M[1]:.1f} m"
+
+    if room.polygon:
+        ring = np.asarray(room.polygon, dtype=float)
+        span = float(np.ptp(ring, axis=0).max())
+        if span > PLAUSIBLE_ROOM_SPAN_M:
+            return f"longest span {span:.1f} m exceeds {PLAUSIBLE_ROOM_SPAN_M:.0f} m"
+    return None
+
+
 def build_photo_plan(
     source: CaptureSource,
     config: PipelineConfig | None = None,
@@ -279,6 +356,18 @@ def build_photo_plan(
             continue
 
         largest = max(rooms, key=lambda r: r.floor_area.value)
+
+        reason = _implausible(largest)
+        if reason:
+            warnings.append(
+                f"{name}: reconstruction rejected as physically implausible ({reason}); "
+                f"reported as not reconstructed rather than published"
+            )
+            reconstructions.append(
+                RoomReconstruction(room_id, name, None, len(frames), len(frames), scale_sources, room_warnings)
+            )
+            continue
+
         renamed = largest.model_copy(update={"room_id": room_id, "label": name})
         reconstructions.append(
             RoomReconstruction(room_id, name, renamed, len(frames), len(frames), scale_sources, room_warnings)
