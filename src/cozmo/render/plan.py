@@ -13,6 +13,9 @@ the brief penalises.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any, Optional
+
 import numpy as np
 
 from cozmo.render.drawing import Arc, Circle, Drawing, Line, Polygon, Style, Text

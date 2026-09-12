@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import yaml
 
@@ -83,26 +83,26 @@ class ConcealedRule:
 def _eval_node(
     node: Mapping[str, Any], context: Mapping[str, Any], evaluations: List[RuleEvaluation]
 ) -> bool:
-        if "all_of" in node:
-            return all(_eval_node(child, context, evaluations) for child in node["all_of"])
-        if "any_of" in node:
-            return any(_eval_node(child, context, evaluations) for child in node["any_of"])
-        if "none_of" in node:
-            return not any(_eval_node(child, context, evaluations) for child in node["none_of"])
+    if "all_of" in node:
+        return all(_eval_node(child, context, evaluations) for child in node["all_of"])
+    if "any_of" in node:
+        return any(_eval_node(child, context, evaluations) for child in node["any_of"])
+    if "none_of" in node:
+        return not any(_eval_node(child, context, evaluations) for child in node["none_of"])
 
-        fld = node.get("field")
-        op = node.get("op")
-        val = node.get("value")
-        if not fld or not op or op not in OPERATORS:
-            return False
+    fld = node.get("field")
+    op = node.get("op")
+    val = node.get("value")
+    if not fld or not op or op not in OPERATORS:
+        return False
 
-        actual = context.get(fld)
-        fn = OPERATORS[op]
-        passed = bool(fn(actual, val))
-        evaluations.append(
-            RuleEvaluation(field=fld, op=op, expected=val, actual=actual, passed=passed)
-        )
-        return passed
+    actual = context.get(fld)
+    fn = OPERATORS[op]
+    passed = bool(fn(actual, val))
+    evaluations.append(
+        RuleEvaluation(field=fld, op=op, expected=val, actual=actual, passed=passed)
+    )
+    return passed
 
 
 class RuleEngine:

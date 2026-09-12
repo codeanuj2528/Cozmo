@@ -134,3 +134,6 @@ class VideoCapture(CaptureSource):
     def close(self) -> None:
         if self.cap:
             self.cap.release()
+
+    def __del__(self) -> None:
+        self.close()

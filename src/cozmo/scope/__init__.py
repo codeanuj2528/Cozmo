@@ -1,0 +1,1 @@
+"""Scope line item generation."""

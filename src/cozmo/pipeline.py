@@ -52,6 +52,7 @@ from cozmo.geometry.walls import (
 from cozmo.io.base import CaptureSource
 from cozmo.schema import (
     CalibrationReport,
+    DamageRegion,
     DriftReport,
     IntervalMethod,
     PropertyPlan,

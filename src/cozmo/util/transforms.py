@@ -142,7 +142,7 @@ def pose_distance(a: np.ndarray, b: np.ndarray) -> tuple[float, float]:
     return dt, float(np.arccos(cos))
 
 
-def gravity_align(points: np.ndarray, up: np.ndarray) -> np.ndarray:
+def gravity_align(up: np.ndarray) -> np.ndarray:
     """Rotation that takes `up` onto +y, leaving the yaw of the scene untouched."""
     up = up / np.linalg.norm(up)
     axis = np.cross(up, UP)
@@ -153,5 +153,4 @@ def gravity_align(points: np.ndarray, up: np.ndarray) -> np.ndarray:
     angle = np.arccos(np.clip(up @ UP, -1.0, 1.0))
     kx = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
     r = np.eye(3) + np.sin(angle) * kx + (1 - np.cos(angle)) * (kx @ kx)
-    _ = points
     return r
