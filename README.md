@@ -115,11 +115,19 @@ docstring.
 
 ## State of the evidence
 
-The LiDAR tier works: on a 107 m walk through a four-space flat it returns 6 rooms, 27.20 m²,
-per-room ceiling heights of 2.49–2.68 m, 10 openings, 5 adjacencies, in 86 s.
+Read `AUDIT.md` before this section. It carries the measured gate status, a defect register
+and the fix plan, and every number in it names the capture it came from.
 
-The photo tier does not meet its accuracy gates and `known_failure_modes.md` §1 says why,
-with the measurement.
+The LiDAR tier works, on one capture: `163f18d3ac`, a 96.6 m walk, returns 6 rooms, 27.20 m²,
+10 openings and 5 adjacencies in 235 s. Its per-room ceiling heights are 1.86–2.63 m, and the
+1.86 m is a soffit mistaken for a ceiling rather than a room. **That capture lives in
+`data/raw/`, not in the benchmark slot:** `DROP_CAPTURES_HERE/01_multiroom_lidar` holds
+`ae3edc814d`, a 23.1 m walk that returns 3 rooms and 16.69 m². Numbers in the other documents
+that read "6 rooms, 27.20 m²" belong to `163f18d3ac` and are being corrected to say so.
 
-10 of 14 gates report `SKIP` because laser ground truth for the benchmark property has not
-been recorded. They are not reported as passing.
+The photo tier recovers 2 of 4 rooms with no openings and no adjacency, so it does not stitch.
+The video tier returns 526.51 m² for 2 rooms and is broken by an order of magnitude.
+
+No laser or tape ground truth exists for any capture, so every accuracy gate reports `SKIP`.
+`capture/ground_truth.csv` is the empty template on purpose: it was briefly filled with
+invented rows, and `quarantine/README.md` records what was removed and why.

@@ -83,7 +83,7 @@ property has not been recorded. `capture/DEVICE_MATRIX.md` carries those cells m
 ## 3. Drift
 
 The brief makes "poses used as-is" an automatic fail, and it is right to. ARKit's odometry is
-locally excellent and globally not: over a 107 m walk the loop does not close, the corridor
+locally excellent and globally not: over a 96.6 m walk the loop does not close, the corridor
 comes out long, and the last room lands centimetres from the first.
 
 Correction is a pose graph over keyframes: odometry edges at the reported relative pose,
@@ -104,7 +104,8 @@ Drift alone does not remove residual yaw, so walls within 6° of the building fr
 rotated onto it and their offsets refit from their own points — the plane-anchored half.
 Only the direction comes from the prior; the position stays measured.
 
-**Ablation, author's flat, 107 m, four spaces:**
+**Ablation, `163f18d3ac`, 96.6 m walk, six segmented spaces.** All four rows regenerate
+from the CLI; the `snap off` rows need `--no-snap-walls`, which exists for this reason:
 
 | variant | rooms | footprint | Manhattan compliance | room-frame dispersion |
 |---|---|---|---|---|
@@ -232,14 +233,16 @@ none.
 height, by any method. The pipeline reports `unmeasured` rather than substituting a default.
 The company's own `single_room` sample has 61 downward-facing points in the entire scan; the
 author's first capture had 1.4% of frames aimed up and the second had 24.3%, which is the
-difference between no ceiling heights and 2.49–2.68 m per room.
+difference between no ceiling heights and 1.86–2.63 m per room.
 
 ---
 
 ## 8. State of the evidence
 
-The LiDAR tier works. On a 107 m walk through a four-space flat: 6 rooms, 27.20 m², per-room
-ceiling heights 2.49–2.68 m, 10 openings, 5 adjacencies, 86 s.
+The LiDAR tier works on `163f18d3ac`, a 96.6 m walk: 6 rooms, 27.20 m², per-room ceiling
+heights 1.86–2.63 m, 10 openings, 5 adjacencies, 235 s. That capture is in `data/raw/`; the
+benchmark slot holds `ae3edc814d`, a 23.1 m walk giving 3 rooms and 16.69 m². `AUDIT.md`
+carries the measured gate status and the defect register.
 
 Ten of fourteen gates report `SKIP`, because laser ground truth for the benchmark property
 has not been recorded. They are not reported as passing, and the marks for those rows are

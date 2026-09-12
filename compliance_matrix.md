@@ -17,7 +17,7 @@ property has not been recorded — those rows report `SKIP` in the gate table ra
 | 1.3 | Install in under 10 minutes | `capture/PROTOCOL.md` | Two free App Store apps, no sign-in, no provisioning | **MET** |
 | 1.4 | Photo tier — 2 to 8 stills per room, no depth, no poses | `cozmo/io/photo.py`, `cozmo/pipeline/photo.py` | Runs on 58 real stills across 4 rooms | **PARTIAL** — runs, fails its accuracy gate; see 2.14 |
 | 1.5 | Video tier — handheld walkthrough | `cozmo/pipeline/video.py` | Keyframe extraction with blur rejection, sequential registration | **PARTIAL** — runs; not scored against ground truth |
-| 1.6 | LiDAR tier — depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | 6 rooms, 27.20 m², 10 openings, 5 adjacency on the real capture | **MET** |
+| 1.6 | LiDAR tier — depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | 6 rooms, 27.20 m², 10 openings, 5 adjacency on `163f18d3ac` (`data/raw/`). The benchmark slot `01_multiroom_lidar` holds `ae3edc814d`: 3 rooms, 16.69 m², 5 openings, 2 adjacency | **MET** |
 | 1.7 | Device matrix | `capture/DEVICE_MATRIX.md` | Tier availability per device; accuracy cells marked `pending` until measured | **PARTIAL** — matrix present, accuracy cells unfilled pending laser |
 | 1.8 | Same output contract from each tier | `cozmo/schema.py`, `cozmo/pipeline/__init__.py` | One `PropertyPlan`, one `reconstruct`, three builders | **MET** |
 | 1.9 | Intervals widen as sensor data thins | `cozmo/uncertainty/calibration.py` | Per-tier priors; photo-tier walls at ±134 cm on the real capture | **MET** |
@@ -27,7 +27,7 @@ property has not been recorded — those rows report `SKIP` in the gate table ra
 | # | Requirement | Where | Artifact | Status |
 |---|---|---|---|---|
 | 2.1 | Dimensioned per-room plan with walls | `cozmo/geometry/assemble.py` | `Room.walls[]`, each with start, end, length, plane, support | **MET** |
-| 2.2 | Ceiling height per room | `cozmo/geometry/levels.py` | Per-room, 2.49–2.68 m on the real capture; `unmeasured` when not observed | **MET** |
+| 2.2 | Ceiling height per room | `cozmo/geometry/levels.py` | Per-room, 1.86–2.63 m on `163f18d3ac`; the 1.86 m is a soffit read as a ceiling. 8 of 24 rooms across all captures publish `0.0 m` rather than abstaining (`AUDIT.md` D1) | **PARTIAL** |
 | 2.3 | Floor area and openings | `cozmo/geometry/{cellcomplex,openings}.py` | `Room.floor_area`, `Room.openings[]` | **MET** |
 | 2.4 | Stitched multi-room plan, correct adjacency | `cozmo/geometry/assemble.py`, `cozmo/stitch/rooms.py` | 5 adjacencies from trajectory on the real capture | **MET** at LiDAR/video; **NOT MET** at photo tier |
 | 2.5 | Per-surface damage regions, class and metric extent | `cozmo/damage/detect.py` | `DamageRegion` with surface_id, class, metric extent | **MET** |
@@ -37,12 +37,12 @@ property has not been recorded — those rows report `SKIP` in the gate table ra
 | 2.9 | One command per capture | `cozmo/cli.py` | `cozmo run --input DIR --out DIR` | **MET** |
 | 2.10 | JSON to the published schema | `cozmo/schema.py` | Pydantic-validated `plan.json` | **MET** |
 | 2.11 | Rendered plan | `cozmo/render/` | `plan.svg` and `plan.png` per run | **MET** |
-| 2.12 | Benchmark: multi-room, 3+ rooms plus connector | `DROP_CAPTURES_HERE/01_multiroom_lidar` | Hall, passage, bedroom, bathroom; 107.6 m walked | **MET** |
+| 2.12 | Benchmark: multi-room, 3+ rooms plus connector | `DROP_CAPTURES_HERE/01_multiroom_lidar` | The slot holds `ae3edc814d`: 23.1 m walked, 3 rooms, 2 adjacencies. `163f18d3ac` (96.6 m, 6 rooms, 5 adjacencies) meets the requirement but is not the benchmark input | **NOT MET** |
 | 2.13 | Benchmark: furnished room, staged damage, two classes | — | — | **NOT MET** — not captured before the deadline |
 | 2.14 | Benchmark: same rooms at all three tiers | `DROP_CAPTURES_HERE/0{1,2,3}_*` | LiDAR + video + per-room photo folders of one property | **MET** as captures; photo tier fails its gate |
 | 2.15 | Benchmark: one room captured twice, same tier | — | — | **NOT MET** — repeat scan not captured |
 | 2.16 | Laser or tape ground truth on everything | `capture/ground_truth.csv` | Template and recording sheet shipped; **not filled** | **NOT MET** |
-| 2.17 | Raw sensor data submitted | `DROP_CAPTURES_HERE/` | 18,649-frame Stray export, 58 stills, walkthrough clip | **MET** |
+| 2.17 | Raw sensor data submitted | `DROP_CAPTURES_HERE/` | 4,378-frame Stray export in `01_multiroom_lidar`, 58 stills, one walkthrough clip. The 18,649-frame export is `163f18d3ac` and sits in `data/raw/` | **PARTIAL** |
 | 2.18 | Gate: opening widths ≤2 cm on ≥85%, detection scored | `cozmo/bench/gates.py` `gate_opening_widths` | Phantoms and misses both counted in the denominator | **UNVERIFIED** — no ground truth |
 | 2.19 | Gate: ceiling height ≤1.5 cm per room | `cozmo/bench/gates.py` `gate_ceiling_height` | Implemented | **UNVERIFIED** |
 | 2.20 | Gate: repeat spread ≤1 cm, and say which failure it is | `cozmo/bench/gates.py` `gate_repeatability` | Bias and spread scored separately | **UNVERIFIED** — needs the repeat capture |
@@ -87,7 +87,7 @@ property has not been recorded — those rows report `SKIP` in the gate table ra
 | D2 | Capture route + device matrix | `capture/PROTOCOL.md`, `capture/DEVICE_MATRIX.md` | **MET** |
 | D3 | Repo, README to running in 15 min, one command per capture | `README.md` | **MET** |
 | D4 | Reproduction bundle | `run_manifest.json` per run: git commit, input hash, config, timings | **MET** |
-| D5 | Benchmark report across three tiers | `reports/benchmark/gate_table.txt` | **PARTIAL** — 4 pass, 0 fail, 10 not evaluated |
+| D5 | Benchmark report across three tiers | `AUDIT.md` Part C | **PARTIAL** — of 13 gate rows, 4 are measurable without ground truth: drift accountability passes on a real two-run ablation, room overlap passes vacuously, and repeatability plus the photo stitch fail. The rest are UNMEASURABLE for want of a laser sheet |
 | D6 | Fix loop bundle | `fixloop/` | **MET** |
 | D7 | Technical report, max 6 pages | `technical_report.md` | **MET** |
 | D8 | Raw benchmark data | `DROP_CAPTURES_HERE/` | **PARTIAL** — captures yes, ground truth no |

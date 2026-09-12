@@ -53,7 +53,8 @@ sample has 61 downward-facing points in the entire scan.
 
 The pipeline reports `ceiling unmeasured` rather than substituting a default. On the first
 capture of the benchmark property, 1.4% of frames were aimed up and the result was poor; on
-the second, 24.3% were, and per-room heights came out at 2.49–2.68 m.
+the second, 24.3% were, and per-room heights came out at 1.86–2.63 m -- the 1.86 m being a
+soffit read as a ceiling, not a room.
 
 ## 4. Mirrors, glass and wet-look surfaces
 
@@ -80,8 +81,8 @@ revisit (path walked at least 6× the distance closed), ICP must reach 0.55 fitn
 0.035 m RMSE, and the pose graph uses a soft-L1 loss so one surviving false closure cannot
 dominate.
 
-The ablation is reported in the benchmark table for every capture. On the author's flat the
-four-way ablation is:
+The ablation is reported in the benchmark table for every capture. On `163f18d3ac` (96.6 m)
+the four-way ablation is, all four rows regenerable from the CLI:
 
 | variant | rooms | footprint | Manhattan compliance | room-frame dispersion |
 |---|---|---|---|---|
