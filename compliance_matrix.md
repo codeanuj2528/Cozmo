@@ -1,73 +1,110 @@
-# Compliance Matrix: Requirement → File Path → Artifact → Status
+# Compliance matrix
 
-This compliance matrix audits every single requirement from the Cozmo AI Case Study specification against source file paths, generated artifacts, and verification status.
+Requirement → where it lives → what it produces → status.
 
----
+`MET` means implemented and demonstrated on real data. `PARTIAL` means implemented and
+falling short, with the shortfall quantified. `NOT MET` means absent. `UNVERIFIED` means
+built and runnable but not yet scored, because the laser ground truth for the benchmark
+property has not been recorded — those rows report `SKIP` in the gate table rather than
+`PASS`.
 
-## 1. Part 1: Capture Routes & Input Tiers
+## Part 1 — Capture route and tiers
 
-| Requirement | Source File Path | Generated Artifact / Output | Status |
+| # | Requirement | Where | Artifact | Status |
+|---|---|---|---|---|
+| 1.1 | Capture route chosen and documented | `capture/PROTOCOL.md` | One-page stock-capture protocol, Stray Scanner + native Camera | **MET** |
+| 1.2 | Non-engineer can follow it literally | `capture/PROTOCOL.md` | Install table, walk script, failure table, hand-off command | **MET** |
+| 1.3 | Install in under 10 minutes | `capture/PROTOCOL.md` | Two free App Store apps, no sign-in, no provisioning | **MET** |
+| 1.4 | Photo tier — 2 to 8 stills per room, no depth, no poses | `cozmo/io/photo.py`, `cozmo/pipeline/photo.py` | Runs on 58 real stills across 4 rooms | **PARTIAL** — runs, fails its accuracy gate; see 2.14 |
+| 1.5 | Video tier — handheld walkthrough | `cozmo/pipeline/video.py` | Keyframe extraction with blur rejection, sequential registration | **PARTIAL** — runs; not scored against ground truth |
+| 1.6 | LiDAR tier — depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | 6 rooms, 27.20 m², 10 openings, 5 adjacency on the real capture | **MET** |
+| 1.7 | Device matrix | `capture/DEVICE_MATRIX.md` | Tier availability per device; accuracy cells marked `pending` until measured | **PARTIAL** — matrix present, accuracy cells unfilled pending laser |
+| 1.8 | Same output contract from each tier | `cozmo/schema.py`, `cozmo/pipeline/__init__.py` | One `PropertyPlan`, one `reconstruct`, three builders | **MET** |
+| 1.9 | Intervals widen as sensor data thins | `cozmo/uncertainty/calibration.py` | Per-tier priors; photo-tier walls at ±134 cm on the real capture | **MET** |
+
+## Part 2 — Output contract and gates
+
+| # | Requirement | Where | Artifact | Status |
+|---|---|---|---|---|
+| 2.1 | Dimensioned per-room plan with walls | `cozmo/geometry/assemble.py` | `Room.walls[]`, each with start, end, length, plane, support | **MET** |
+| 2.2 | Ceiling height per room | `cozmo/geometry/levels.py` | Per-room, 2.49–2.68 m on the real capture; `unmeasured` when not observed | **MET** |
+| 2.3 | Floor area and openings | `cozmo/geometry/{cellcomplex,openings}.py` | `Room.floor_area`, `Room.openings[]` | **MET** |
+| 2.4 | Stitched multi-room plan, correct adjacency | `cozmo/geometry/assemble.py`, `cozmo/stitch/rooms.py` | 5 adjacencies from trajectory on the real capture | **MET** at LiDAR/video; **NOT MET** at photo tier |
+| 2.5 | Per-surface damage regions, class and metric extent | `cozmo/damage/detect.py` | `DamageRegion` with surface_id, class, metric extent | **MET** |
+| 2.6 | Concealed-damage flags with the rule that fired | `cozmo/damage/rules.py` | `ConcealedFlag.rule_text` carries the readable rule | **MET** |
+| 2.7 | Scope line items keyed to surfaces | `cozmo/scope/generate.py` | `ScopeItem.surface_id`, `driver_damage_ids` | **MET** |
+| 2.8 | Confidence interval on every measurement | `cozmo/schema.py` `Measure` | No code path emits a bare float for a physical quantity | **MET** |
+| 2.9 | One command per capture | `cozmo/cli.py` | `cozmo run --input DIR --out DIR` | **MET** |
+| 2.10 | JSON to the published schema | `cozmo/schema.py` | Pydantic-validated `plan.json` | **MET** |
+| 2.11 | Rendered plan | `cozmo/render/` | `plan.svg` and `plan.png` per run | **MET** |
+| 2.12 | Benchmark: multi-room, 3+ rooms plus connector | `DROP_CAPTURES_HERE/01_multiroom_lidar` | Hall, passage, bedroom, bathroom; 107.6 m walked | **MET** |
+| 2.13 | Benchmark: furnished room, staged damage, two classes | — | — | **NOT MET** — not captured before the deadline |
+| 2.14 | Benchmark: same rooms at all three tiers | `DROP_CAPTURES_HERE/0{1,2,3}_*` | LiDAR + video + per-room photo folders of one property | **MET** as captures; photo tier fails its gate |
+| 2.15 | Benchmark: one room captured twice, same tier | — | — | **NOT MET** — repeat scan not captured |
+| 2.16 | Laser or tape ground truth on everything | `capture/ground_truth.csv` | Template and recording sheet shipped; **not filled** | **NOT MET** |
+| 2.17 | Raw sensor data submitted | `DROP_CAPTURES_HERE/` | 18,649-frame Stray export, 58 stills, walkthrough clip | **MET** |
+| 2.18 | Gate: opening widths ≤2 cm on ≥85%, detection scored | `cozmo/bench/gates.py` `gate_opening_widths` | Phantoms and misses both counted in the denominator | **UNVERIFIED** — no ground truth |
+| 2.19 | Gate: ceiling height ≤1.5 cm per room | `cozmo/bench/gates.py` `gate_ceiling_height` | Implemented | **UNVERIFIED** |
+| 2.20 | Gate: repeat spread ≤1 cm, and say which failure it is | `cozmo/bench/gates.py` `gate_repeatability` | Bias and spread scored separately | **UNVERIFIED** — needs the repeat capture |
+| 2.21 | Gate: repeatability 1 cm or 0.5% per wall | `cozmo/bench/gates.py` `gate_repeatability` | Cyclic wall pairing | **UNVERIFIED** |
+| 2.22 | Gate: drift accountability with on/off ablation | `cozmo/geometry/drift.py`, `known_failure_modes.md` §5 | Four-way ablation table on the real capture | **MET** |
+| 2.23 | Gate: photo-tier whole-property stitch, ±8% | `cozmo/stitch/rooms.py` | Stitcher built; 0 openings so nothing to match | **NOT MET** — footprint −36%, 1 room of 4 |
+| 2.24 | Calibration scored at every tier | `cozmo/uncertainty/calibration.py`, `cozmo/bench/gates.py` | Split conformal with finite-sample correction; `gate_interval_coverage` | **UNVERIFIED** — fits from residuals, none exist yet |
+
+## Part 3 — Head-to-head
+
+| # | Requirement | Where | Artifact | Status |
+|---|---|---|---|---|
+| 3.1 | Compare against one consumer app on 2 rooms | — | — | **NOT MET** — competitor export not captured |
+| 3.2 | Name the app and version, submit its export | `DROP_CAPTURES_HERE/08_competitor_export` | Folder prepared, empty | **NOT MET** |
+| 3.3 | Beat or tie on ≥70% of shared dimensions | `cozmo/bench/headtohead.py` | Comparison harness present, no data | **NOT MET** |
+
+## Part 4 — Fix loop
+
+| # | Requirement | Where | Artifact | Status |
+|---|---|---|---|---|
+| 4.1 | Worst gate named with its failing number | `fixloop/FIX_DECLARATION.md` §1 | Photo-tier footprint, +422% | **MET** |
+| 4.2 | Root-cause hypothesis with evidence | `fixloop/FIX_DECLARATION.md` §2 | EXIF sub-IFD; fx 4125.3 vs 2221.3 | **MET** |
+| 4.3 | Predicted number, stated before the fix | `fixloop/FIX_DECLARATION.md` §3 | Predicted <+50%; committed before the fix commit | **MET** |
+| 4.4 | Fix shipped | `cozmo/recon/monocular.py`, `cozmo/pipeline/photo.py` | Four changes, in the commit after the declaration | **MET** |
+| 4.5 | Before and after, both regenerable | `fixloop/before/`, `fixloop/after/` | Full run outputs; regeneration commands in the declaration §4 | **MET** |
+| 4.6 | Readable diff | `git diff fixloop-before..HEAD` | Tag `fixloop-before` marks the pre-fix state | **MET** |
+| 4.7 | Gate moves fail → pass | — | +422% → −36%. Large movement, gate not passed | **PARTIAL** |
+| 4.8 | Post-mortem where the prediction was wrong | `fixloop/POSTMORTEM.md` | Prediction wrong in direction; why, and the real cause measured two ways | **MET** |
+
+## Part 5 — Process evidence
+
+| # | Requirement | Where | Artifact | Status |
+|---|---|---|---|---|
+| 5.1 | Commit as you work, auditable history | `git log` | Incremental commits, each with the defect it fixed and the number it moved | **MET** |
+| 5.2 | Not a single-commit dump | `git log` | Work committed across the build, declaration committed before its fix | **MET** |
+
+## Deliverables
+
+| # | Requirement | Where | Status |
 |---|---|---|---|
-| **Route 1 / Route 2 Stock Capture Protocol** | [capture_protocol.md](file:///Users/anuj/Desktop/cozmo_ass/cozmo/capture_protocol.md) | `capture_protocol.md`, `PROTOCOL.md` | **MET** |
-| **Device Matrix across Tiers & Hardware** | [capture_protocol.md](file:///Users/anuj/Desktop/cozmo_ass/cozmo/capture_protocol.md#device-matrix) | `DEVICE_MATRIX.md` | **MET** |
-| **Photos Tier (2–8 stills/room per-room folder)** | [src/cozmo/io/photo.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/io/photo.py) | `PhotoCapture` class | **MET** |
-| **Video Tier (handheld walkthrough clip)** | [src/cozmo/io/video.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/io/video.py) | `VideoCapture` class | **MET** |
-| **LiDAR Tier (depth, poses, intrinsics)** | [src/cozmo/io/stray.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/io/stray.py) | `StrayCapture` class | **MET** |
+| D1 | Compliance matrix | this file | **MET** |
+| D2 | Capture route + device matrix | `capture/PROTOCOL.md`, `capture/DEVICE_MATRIX.md` | **MET** |
+| D3 | Repo, README to running in 15 min, one command per capture | `README.md` | **MET** |
+| D4 | Reproduction bundle | `run_manifest.json` per run: git commit, input hash, config, timings | **MET** |
+| D5 | Benchmark report across three tiers | `reports/benchmark/gate_table.txt` | **PARTIAL** — 4 pass, 0 fail, 10 not evaluated |
+| D6 | Fix loop bundle | `fixloop/` | **MET** |
+| D7 | Technical report, max 6 pages | `technical_report.md` | **MET** |
+| D8 | Raw benchmark data | `DROP_CAPTURES_HERE/` | **PARTIAL** — captures yes, ground truth no |
+| D9 | Weights fetched by script | `scripts/fetch_weights.sh` | **MET** |
+| D10 | Runs without calling our infrastructure | no network at run time; `scripts/fetch_weights.sh` is the only fetch | **MET** |
+| D11 | Mirrors, glass, wet-look, low light covered | `known_failure_modes.md` §4 | **MET** |
 
----
+## Summary
 
-## 2. Part 2: Output Contract & Gates
+| status | count |
+|---|---|
+| MET | 38 |
+| PARTIAL | 7 |
+| UNVERIFIED (built, needs ground truth) | 5 |
+| NOT MET | 7 |
 
-| Requirement | Source File Path | Generated Artifact / Output | Status |
-|---|---|---|---|
-| **Dimensioned per-room plan (walls, CH, floor area, openings)** | [src/cozmo/schema.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/schema.py) | `Room`, `Wall`, `Opening` Pydantic models | **MET** |
-| **Stitched multi-room plan with correct adjacency** | [src/cozmo/geometry/cellcomplex.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/geometry/cellcomplex.py) | `Adjacency` objects & polygon graph | **MET** |
-| **Per-surface damage regions (class & metric extent)** | [src/cozmo/damage/detect.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/damage/detect.py) | `DamageRegion` objects | **MET** |
-| **Concealed-damage flags with rule that fired** | [src/cozmo/damage/rules.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/damage/rules.py) | `ConcealedFlag` objects | **MET** |
-| **Scope line items keyed to surfaces** | [src/cozmo/scope/generate.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/scope/generate.py) | `ScopeItem` objects | **MET** |
-| **Confidence interval on every measurement** | [src/cozmo/schema.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/schema.py) | `Measure` model with lo/hi/coverage | **MET** |
-| **One command per capture CLI** | [src/cozmo/cli.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/cli.py) | `cozmo run --input DIR --out DIR` | **MET** |
-| **Published JSON schema validation** | [src/cozmo/schema.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/schema.py) | `PropertyPlan.model_dump_json()` | **MET** |
-| **Rendered plan (SVG/PNG)** | [src/cozmo/render/plan.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/render/plan.py) | `plan.png`, `plan.svg` | **MET** |
-| **Opening Widths Gate (≤ 2cm on ≥ 85%)** | [src/cozmo/bench/score.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/bench/score.py) | `Opening Widths` Gate Result (PASS) | **MET** |
-| **Ceiling Height Gate (≤ 1.5cm / repeat ≤ 1cm)** | [src/cozmo/bench/score.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/bench/score.py) | `Ceiling Height` Gate Result (PASS) | **MET** |
-| **Repeatability Gate (≤ 1cm or 0.5% per wall)** | [src/cozmo/bench/score.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/bench/score.py) | `Repeatability` Gate Result (PASS) | **MET** |
-| **Drift Accountability & Ablation (ON vs OFF)** | [src/cozmo/geometry/drift.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/geometry/drift.py) | `DriftReport` & Ablation Arm | **MET** |
-| **Photo-tier Whole-Property Stitch (footprint ±8%)** | [src/cozmo/bench/score.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/bench/score.py) | `Photo-tier Stitch` Gate Result (PASS) | **MET** |
-
----
-
-## 3. Part 3: Head-to-Head Evaluation
-
-| Requirement | Source File Path | Generated Artifact / Output | Status |
-|---|---|---|---|
-| **Head-to-head vs consumer scan app on 2 benchmark rooms** | [src/cozmo/bench/score.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/bench/score.py) | `HeadToHeadResult` table in `benchmark_report.md` | **MET** |
-| **Beat or tie on ≥ 70% of shared dimensions** | [src/cozmo/bench/score.py](file:///Users/anuj/Desktop/cozmo_ass/cozmo/src/cozmo/bench/score.py) | 80.0% Win/Tie rate verified | **MET** |
-
----
-
-## 4. Part 4: Fix Loop
-
-| Requirement | Source File Path | Generated Artifact / Output | Status |
-|---|---|---|---|
-| **One-page Fix Declaration** | [fixloop/FIX_DECLARATION.md](file:///Users/anuj/Desktop/cozmo_ass/cozmo/fixloop/FIX_DECLARATION.md) | `fixloop/FIX_DECLARATION.md` | **MET** |
-| **Regenerable Before Run Output** | [fixloop/before_run.json](file:///Users/anuj/Desktop/cozmo_ass/cozmo/fixloop/before_run.json) | `fixloop/before_run.json` | **MET** |
-| **Regenerable After Run Output** | [fixloop/after_run.json](file:///Users/anuj/Desktop/cozmo_ass/cozmo/fixloop/after_run.json) | `fixloop/after_run.json` | **MET** |
-| **Readable Diff** | [fixloop/diff.patch](file:///Users/anuj/Desktop/cozmo_ass/cozmo/fixloop/diff.patch) | `fixloop/diff.patch` | **MET** |
-
----
-
-## 5. Part 5: Process Evidence & Deliverables
-
-| Requirement | Source File Path | Generated Artifact / Output | Status |
-|---|---|---|---|
-| **README (Fresh machine setup < 15 min)** | [README.md](file:///Users/anuj/Desktop/cozmo_ass/cozmo/README.md) | `README.md` | **MET** |
-| **Technical Report (Max 6 pages)** | [technical_report.md](file:///Users/anuj/Desktop/cozmo_ass/cozmo/technical_report.md) | `technical_report.md` | **MET** |
-| **Known Failure Modes & Mitigations** | [known_failure_modes.md](file:///Users/anuj/Desktop/cozmo_ass/cozmo/known_failure_modes.md) | `known_failure_modes.md` | **MET** |
-| **Capture Protocol & Device Matrix** | [capture_protocol.md](file:///Users/anuj/Desktop/cozmo_ass/cozmo/capture_protocol.md) | `capture_protocol.md` | **MET** |
-| **Benchmark Report** | [benchmark_report.md](file:///Users/anuj/Desktop/cozmo_ass/cozmo/benchmark_report.md) | `benchmark_report.md` | **MET** |
-| **Dockerfile Reproduction Environment** | [Dockerfile](file:///Users/anuj/Desktop/cozmo_ass/cozmo/Dockerfile) | `Dockerfile` | **MET** |
-
----
-
-### Summary Audit: 24 / 24 Requirements Fully Met (100% Coverage)
+Every `NOT MET` except 2.23 is a missing capture rather than missing code: the staged-damage
+room, the repeat scan, the competitor export and the laser measurements. The harness for each
+is built and will score them as soon as the data exists. 2.23, the photo-tier stitch, is a
+genuine engineering shortfall and is written up as one in `known_failure_modes.md` §1–2.

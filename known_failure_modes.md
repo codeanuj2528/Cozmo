@@ -1,61 +1,125 @@
-# Known Failure Modes, Physical Limitations & Engineering Mitigations
+# Known failure modes
 
-Real-world indoor captures contain complex physical optical phenomena, low light, specular surfaces, and motion artifacts. Below is the systematic failure mode audit and engineering mitigation matrix built into the Cozmo AI pipeline.
+Every entry here was observed on real data, not imagined. Where a number appears, it was
+measured on the benchmark captures and can be reproduced with the command given.
 
----
+## 1. The photo tier does not meet its accuracy gates
 
-## 1. Specular & Transparent Surfaces (Mirrors, Glass, Wet Finishes)
+**Status: fails, and is reported as failing.**
 
-### Failure Mechanism
-- LiDAR pulses penetrate transparent glass or reflect off mirrors and wet tiles, creating virtual 3D point phantom rooms behind wall faces.
+On the benchmark property the photo tier reports one room of four at a footprint 36% below
+the LiDAR reconstruction. It does not reach the ±8% gate.
 
-### Pipeline Mitigation
-- **Carving Occupancy Grid**: Camera rays from poses pass through interior volume. Points detected beyond estimated wall planes with zero backward ray agreement are filtered as mirror reflections.
-- **Specular Fraction Flagging**: `QualityReport.specular_fraction` flags surfaces where > 5% of returns fail ray agreement.
-- **Wall Support RANSAC**: Plane fitting requires strong point support across contiguous 2D spatial clusters, filtering scattered mirror ghost points.
+The cause is measured, not guessed. Depth Anything V2 Metric Indoor over-predicts depth on
+these photographs by a factor established two independent ways:
 
----
+| method | factor |
+|---|---|
+| Camera height implied by the detected floor, against a true ~1.45 m | 1.76 |
+| Median ratio of LiDAR depth to predicted depth, 8 frames, same property | 1.57 |
 
-## 2. Low Light & Textureless Surfaces (Blank White Walls, Dark Rooms)
+The photographs are 0.5x ultra-wide (14 mm equivalent, 88° horizontal). The model is trained
+on normal-field-of-view indoor imagery. A metric monocular model infers depth from apparent
+size, which needs an assumed focal length, so an out-of-distribution field of view shifts its
+metric scale proportionally.
 
-### Failure Mechanism
-- RGB feature matchers fail on featureless drywall or in low-light conditions (< 15 lux), causing drift in video/photo structure-from-motion.
+**What we do about it.** A plausibility guard drops any reconstruction outside 1–60 m² or
+1.8–4.2 m of ceiling and records why, so the tier reports fewer rooms rather than absurd
+ones. The capture protocol now specifies the 1x lens.
 
-### Pipeline Mitigation
-- **LiDAR Depth Fallback**: On Pro devices, depth is populated directly from raw LiDAR sensors independent of visual texture.
-- **Conformal Interval Widening**: When visual illumination or surface coverage drops, interval bounds (`lo`, `hi`) automatically widen via conformal calibration tables.
-- **Low Light Fraction**: `QualityReport.low_light_fraction` reports illumination degradation.
+**What would fix it** is in `fixloop/POSTMORTEM.md`: capture at 1x, and fit the
+focal-to-scale correction against the LiDAR tier, which supplies depth ground truth on the
+same property for free.
 
----
+## 2. Opening detection cannot work at the photo tier
 
-## 3. Accumulated Pose Drift on Long Walkthroughs
+**Status: structural, not a tuning problem.**
 
-### Failure Mechanism
-- Unchecked visual-inertial odometry drift over multi-room loops causes room boundary misalignments, wall doubling, and overlapping rooms.
+Openings are found by looking for points *behind* a wall plane that a camera on the near side
+saw through. A single photograph's depth map is a 2.5D surface: there is nothing behind it,
+ever. The photo tier therefore detects zero openings, and because rooms are stitched by
+matching doorways, it also produces zero adjacency and cannot stitch.
 
-### Pipeline Mitigation
-- **Pose Graph Optimization & Loop Closure**: `correct_drift()` identifies loop closure keyframes and optimizes global camera poses.
-- **Cell Complex Arrangement**: Room polygons are formed from a unified arrangement of global candidate lines, preventing room overlap by construction.
-- **Ablation Arm**: `drift.applied` records footprint area before and after optimization.
+The LiDAR tier finds 10 openings on the same flat.
 
----
+Fixing this needs a different detector for the photo tier — appearance-based door detection,
+or a learned layout estimator — not a threshold change.
 
-## 4. Unmeasured Ceiling Height & Stepped Volume
+## 3. Ceiling height is unmeasurable without the upward lap
 
-### Failure Mechanism
-- Rooms with soffits, dropped ceilings, or unmeasured ceiling heights create elevation ambiguity in global point clouds.
+If the operator never points the phone at the ceiling there are no downward-facing surface
+returns and the height cannot be computed by any method. The company's own `single_room`
+sample has 61 downward-facing points in the entire scan.
 
-### Pipeline Mitigation
-- **Per-Room Level Histogramming**: `room_levels()` extracts separate floor and ceiling heights for each individual room polygon rather than applying a global single-height assumption.
-- **Conformal Interval Coverage**: Unmeasured ceiling height measurements fall back to prior uncertainty bounds (`PRIOR_ONLY` or wide conformal intervals) to avoid confident-garbage outputs.
+The pipeline reports `ceiling unmeasured` rather than substituting a default. On the first
+capture of the benchmark property, 1.4% of frames were aimed up and the result was poor; on
+the second, 24.3% were, and per-room heights came out at 2.49–2.68 m.
 
----
+## 4. Mirrors, glass and wet-look surfaces
 
-## Summary Matrix
+**Handled, with residual risk.**
 
-| Failure Mode | Physical Cause | Primary Mitigation | Output Contract Signal |
-|---|---|---|---|
-| **Mirror Phantoms** | LiDAR reflection | Ray carving & contiguous RANSAC | `specular_fraction` |
-| **Low Light** | Poor photon counts | LiDAR fallback & interval widening | `low_light_fraction` |
-| **Pose Drift** | Odometry accumulation | Pose graph loop closure | `drift.loop_closures_found` |
-| **Unfitted Openings** | Occluded reveals | Bridged wall segment search | `detection_confidence` |
+A mirror returns depth at the reflected distance, so the surface reads as empty and the
+reflection reads as structure behind the wall — indistinguishable from a window to a
+see-through test. Two defences:
+
+- **Geometric mirror test.** Suspect points are reflected back across the wall plane; if they
+  land on the room actually in front of it, the opening is a reflection. The sample flat's
+  bathroom walls score 0.21–0.34 on this test.
+- **Multi-view damage requirement.** A specular highlight is view-dependent and never
+  reprojects to the same patch of surface twice. Requiring two viewpoints took damage on the
+  author's marble-and-glass flat from 21 regions to 1, in a property with no damage in it.
+
+Residual risk: a large mirror facing a blank wall could still pass both tests. A floor-length
+mirror is the worst case and is untested.
+
+## 5. Drift correction can make a reconstruction worse
+
+Loop closure on a wrongly matched pair folds the map. Guards: a candidate must be a genuine
+revisit (path walked at least 6× the distance closed), ICP must reach 0.55 fitness and
+0.035 m RMSE, and the pose graph uses a soft-L1 loss so one surviving false closure cannot
+dominate.
+
+The ablation is reported in the benchmark table for every capture. On the author's flat the
+four-way ablation is:
+
+| variant | rooms | footprint | Manhattan compliance | room-frame dispersion |
+|---|---|---|---|---|
+| drift off, snap off | 6 | 21.16 m² | 0.527 | 0.95° |
+| drift off, snap on | 5 | 18.57 m² | 0.831 | 0.00° |
+| drift on, snap off | 6 | 27.97 m² | 0.575 | 4.91° |
+| drift on, snap on | 6 | 27.20 m² | 0.721 | 0.00° |
+
+## 6. A room the operator did not walk into is not reported
+
+Room segmentation requires camera track inside a face to label it interior. This is
+deliberate — it is what stops the reconstruction leaking through a glass balcony door and
+reporting the courtyard as a room, which it did before the rule existed (195 m² for a 44 m²
+flat). The cost is that a room seen only from its doorway is omitted.
+
+## 7. Damage detection without model weights
+
+With no weights present the classical detector runs: colour-anomaly for stains, black-hat
+ridge with tiling-pattern rejection for cracks. It is genuinely discriminative on synthetic
+walls (clean → nothing; stain → one stain, no crack; crack → one crack, no stain; tile grid →
+nothing) but it has no open-vocabulary capability and will miss classes it was not written
+for. The plan records which detector produced each finding.
+
+## 8. Ultra-wide lens distortion is not modelled
+
+Intrinsics are pinhole. At 0.5x the iPhone's residual barrel distortion after in-camera
+correction is not zero, and nothing here compensates for it. Another reason the protocol now
+specifies 1x.
+
+## 9. Scale uncertainty does not reach the ceiling-height interval
+
+`sigma_height` is composed from plane-fit terms only. That is correct for the LiDAR tier,
+where scale is measured by the sensor, and wrong for the photo tier, where the dominant
+uncertainty is scale. Photo-tier ceiling intervals are therefore narrower than they should
+be. Identified but not fixed before the deadline.
+
+## 10. Gates without ground truth are not evaluated
+
+10 of 14 gates currently report `SKIP` because laser measurements have not been recorded for
+the benchmark property. They are not reported as passing. This is the honest state of the
+evidence and it costs those marks.

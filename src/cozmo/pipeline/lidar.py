@@ -218,7 +218,7 @@ def build_run_manifest(
         "timings": {k: round(v, 4) for k, v in artifacts.timings.items()},
         "keyframes_used": len(artifacts.keyframes),
         "frames_available": source.meta.frame_count,
-        "points_fused": len(artifacts.cloud),
+        "points_fused": len(artifacts.cloud) if artifacts.cloud is not None else 0,
         "rooms_found": len(plan.rooms),
         "total_floor_area_m2": round(plan.total_floor_area.value, 3),
         "warnings": artifacts.warnings,

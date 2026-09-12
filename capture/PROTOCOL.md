@@ -63,8 +63,25 @@ Hand over the `.MOV` file.
 
 ## Tier 3: Photos
 
-Native Camera app, **Photo** mode. Per room, **between 4 and 8 stills** (the contract
-allows 2, but 4 is where the plan stops being a guess):
+Native Camera app, **Photo** mode.
+
+> **Use the 1x lens. Do not use 0.5x.**
+>
+> This is the single most important instruction on the page and it was learned the hard
+> way. The benchmark photographs were taken on 0.5x ultra-wide, at a 14 mm equivalent and
+> an 88 degree field of view. The monocular depth model is trained on normal-field-of-view
+> indoor imagery, so at 0.5x it is out of distribution and over-predicts depth by about
+> 1.76x, which put a 113 m2 bedroom in the plan. At 1x it is in distribution. Check the
+> `1x` is selected before every room; the phone can switch back on its own.
+
+> **At least two photographs per room must show the floor.**
+>
+> Metric scale is recovered from how high the camera is above the floor, so a room with no
+> floor in any photograph has no scale at all. On the benchmark set only 3 photographs in 20
+> showed enough floor, because the ceiling shots were taken instead.
+
+Per room, **between 4 and 8 stills** (the contract allows 2, but 4 is where the plan stops
+being a guess):
 
 1. One from each corner of the room, shooting toward the opposite corner.
 2. One square-on to each doorway, taken from about 2 m back, **with the doorway fully in
@@ -106,3 +123,6 @@ cozmo run <path-to-capture> --tier lidar --out runs/my_capture
 | Two rooms not joined | Doorway captured from one side only | Face the doorway from both rooms |
 | Wide intervals everywhere | Walked too fast, or too dark | Slow down, turn the lights on |
 | A phantom doorway | Mirror photographed square-on | Pass mirrors at an angle |
+| Photo-tier rooms far too large | Photographs taken on 0.5x ultra-wide | Retake at 1x |
+| Photo-tier room reported as not reconstructed | No photograph in it showed the floor | Add two floor-visible photographs |
+| Video tier finds no video | None: `.MOV` and `.mp4` are both accepted, any capitalisation | - |

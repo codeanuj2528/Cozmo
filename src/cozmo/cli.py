@@ -26,6 +26,7 @@ from cozmo.uncertainty.calibration import fit_quantiles
 from cozmo.config import PipelineConfig
 from cozmo.io import load_capture
 from cozmo.pipeline import reconstruct
+from cozmo.pipeline.lidar import MANIFEST_FILENAME, build_run_manifest
 from cozmo.render.plan import render_svg, save_plan_image
 from cozmo.schema import PropertyPlan
 
@@ -103,6 +104,18 @@ def run(
     plan_json_path = out_dir / "plan.json"
     plan_json_path.write_text(plan.model_dump_json(indent=2))
     console.print(f"[bold green]Saved plan JSON:[/bold green] {plan_json_path}")
+
+    # The manifest is what makes a reported number traceable to the run that produced it:
+    # git commit, config, input hash, timings. It existed as a function with no callers, so
+    # every run so far was unattributable -- which is exactly the reproducibility the brief
+    # asks the submission to demonstrate.
+    manifest = build_run_manifest(source, result, input_dir)
+    manifest["config"] = {
+        k: (str(v) if isinstance(v, Path) else v)
+        for k, v in config.__dict__.items()
+    }
+    (out_dir / MANIFEST_FILENAME).write_text(json.dumps(manifest, indent=2, default=str))
+    console.print(f"[bold green]Saved run manifest:[/bold green] {out_dir / MANIFEST_FILENAME}")
 
     svg_path = out_dir / "plan.svg"
     png_path = out_dir / "plan.png"

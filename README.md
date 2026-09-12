@@ -1,113 +1,125 @@
-# Cozmo AI: Multi-Tier Indoor Scan to Floor Plan & Scope Engine
+# Cozmo
 
-A production-grade, multi-tier indoor capture pipeline that transforms consumer smartphone data into dimensioned floor plans, per-surface damage assessments, concealed damage flags, and cost-keyed repair scope line items.
+Handheld iPhone capture to a dimensioned floor plan, damage map and repair scope. Three
+input tiers — photos, video, LiDAR — one output contract.
 
----
+## Running on a fresh capture, on a clean machine
 
-## Quickstart & Installation (Under 15 Minutes)
-
-### Requirements
-- macOS (Apple Silicon or Intel) or Linux
-- Python 3.11 or 3.12
-- Git
-
-### 1. Clone Repository & Setup Virtual Environment
-```bash
-git clone https://github.com/codeanuj2528/Cozmo.git
-cd Cozmo
-
-# Create Python 3.12 environment
-python3.12 -m venv .venv
-source .venv/bin/activate
-
-# Install package with dependencies
-pip install -e ".[ml,dev]" open3d
-```
-
----
-
-## Sample Rendered Output
-
-![Sample Rendered Architectural 2D Floor Plan](docs/images/sample_floorplan.png)
-
----
-
-## One Command Per Capture
-
-Reconstruct any capture directory into `plan.json` and rendered floor plans (`plan.png`, `plan.svg`):
+Four commands, about ten minutes, most of it the first model download.
 
 ```bash
-cozmo run --input data/raw/1a8384c3f6 --out reports/capture_01
+git clone <this repo> && cd cozmo
+curl -LsSf https://astral.sh/uv/install.sh | sh     # if uv is not already present
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[ml]"
+./scripts/fetch_weights.sh                           # ~95 MB, the only network access
 ```
 
-### Run Multi-Room Photo Tier
-```bash
-cozmo run --input data/captures/photo_multi_room --out reports/photo_run
-```
-
-### Run Handheld Video Tier
-```bash
-cozmo run --input data/captures/video_walkthrough --out reports/video_run
-```
-
----
-
-## Benchmark Evaluation & Reproduction
-
-Run full Round 1 gate audit and head-to-head evaluation against ground truth:
+Then, one command per capture:
 
 ```bash
-cozmo benchmark --results reports/capture_01 --ground-truth capture/ground_truth.csv --out reports/benchmark_eval
+.venv/bin/python -m cozmo.cli run --input <capture-dir> --out runs/my_capture
 ```
 
-Run Part 4 Fix Loop reproduction:
+The tier is detected from what the directory holds. It writes `plan.json`, `plan.svg`,
+`plan.png` and `run_manifest.json`.
+
+```
+runs/my_capture/
+  plan.json           the output contract, schema-validated
+  plan.svg            the floor plan, vector
+  plan.png            the floor plan, raster
+  run_manifest.json   git commit, input hash, config, per-stage timings
+```
+
+Nothing reaches the network at run time. `scripts/fetch_weights.sh` is the only fetch and it
+is a separate, explicit step, because the walk-in test is a cold run.
+
+### What each tier expects
+
+| Tier | Input | Detected by |
+|---|---|---|
+| LiDAR | Stray Scanner export folder | `odometry.csv` present |
+| Video | Folder holding one `.mov` / `.mp4` (any capitalisation) | a video file present |
+| Photo | Folder of per-room subfolders of stills, `.jpg` / `.heic` | neither of the above |
+
+```
+photos/
+  hall/       IMG_1583.HEIC ...
+  bedroom/    IMG_1608.HEIC ...
+```
+
+Subfolder names become the room labels on the plan.
+
+## The other commands
 
 ```bash
-cozmo fixloop --input data/raw/1a8384c3f6 --out fixloop
+# Score every run against laser ground truth. Gates with no truth behind them report SKIP,
+# never PASS.
+.venv/bin/python -m cozmo.cli benchmark --runs runs --ground-truth capture/ground_truth.csv \
+    --out reports/benchmark
+
+# Fit split-conformal interval quantiles from measured residuals. Writes nothing if there
+# are no residuals.
+.venv/bin/python -m cozmo.cli calibrate --runs runs --ground-truth capture/ground_truth.csv
+
+# Drift on/off ablation
+.venv/bin/python -m cozmo.cli run --input <dir> --out runs/no_drift --no-drift-correction
 ```
 
-Run automated Pytest test suite:
+## Where to look
+
+| | |
+|---|---|
+| What to capture, and how | `capture/PROTOCOL.md` |
+| What to measure with the laser | `capture/RECORDING_SHEET.md`, `capture/ground_truth.csv` |
+| Which tier runs on which device | `capture/DEVICE_MATRIX.md` |
+| Requirement → file → artifact → status | `compliance_matrix.md` |
+| Architecture and the error budget | `technical_report.md` |
+| What does not work, with numbers | `known_failure_modes.md` |
+| The Part 4 fix loop | `fixloop/` |
+| Artifacts that could not be reproduced | `quarantine/README.md` |
+
+## Layout
+
+```
+src/cozmo/
+  schema.py        the output contract; every quantity is a Measure with an interval
+  config.py        every default, in one place
+  cli.py           run / benchmark / calibrate / fixloop
+  io/              capture readers, one per input format
+  recon/           depth backbone, monocular metric recovery, registration
+  geometry/        fusion, planes, levels, walls, openings, cell complex, drift, assembly
+  stitch/          joining separately reconstructed rooms
+  damage/          detection, projection to surfaces, concealed-damage rules
+  scope/           repair line items
+  uncertainty/     split-conformal calibration
+  render/          plan drawing, SVG and PNG backends
+  bench/           ground truth, gates, structural metrics
+```
+
+The design principle worth knowing before reading the code: **a tier's job is to produce
+frames carrying intrinsics, metric depth and a pose. After that, all three tiers run the
+same reconstruction core.** LiDAR is handed all three; photo and video manufacture them. If
+you are looking for a tier-specific bug, it is almost certainly in the front half.
+
+## Tests
 
 ```bash
-PYTHONPATH=src pytest
+.venv/bin/python -m pytest tests/ -q
 ```
 
----
+40 tests. They cover the geometry primitives against closed-form answers, the detectors
+against synthetic walls where the right answer is known, and the schema contract. Several
+exist because a defect got past review and into a real run; those name the defect in the
+docstring.
 
-## Output Contract & Deliverables
+## State of the evidence
 
-Each capture outputs a single validated `plan.json` conforming to Pydantic v2 schemas:
-- **Dimensioned per-room plan**: Walls, ceiling height, floor area, openings with calibrated confidence intervals (`Measure`).
-- **Stitched multi-room plan**: Correct room adjacency and pose graph loop closure.
-- **Damage regions**: Class, extent, severity, and surface-local bounding polygons.
-- **Concealed damage flags**: Explicit rule-based flags with firing rationale and recommended actions.
-- **Scope line items**: Unit-cost repair items keyed to surface IDs.
+The LiDAR tier works: on a 107 m walk through a four-space flat it returns 6 rooms, 27.20 m²,
+per-room ceiling heights of 2.49–2.68 m, 10 openings, 5 adjacencies, in 86 s.
 
----
+The photo tier does not meet its accuracy gates and `known_failure_modes.md` §1 says why,
+with the measurement.
 
-## Project Structure
-
-```
-├── capture/                  # Benchmark plan, recording sheet, device matrix, protocol
-├── fixloop/                  # Part 4 Fix Loop declaration, before/after runs, diff
-├── reports/                  # Pipeline output reports & benchmark evaluations
-├── src/cozmo/
-│   ├── bench/                # Benchmark scoring & head-to-head engine
-│   ├── damage/               # Damage detector & concealed damage rule engine
-│   ├── geometry/             # Cell complex, plane fitting, wall extraction, drift correction
-│   ├── io/                   # LiDAR (Stray Scanner), Video, and Photo tier loaders
-│   ├── render/               # Architectural 2D SVG/PNG floor plan renderer
-│   ├── scope/                # Scope line item generator
-│   ├── tiers/                # Multi-tier adapters
-│   ├── cli.py                # Typer CLI application
-│   ├── pipeline.py           # Core reconstruction engine
-│   └── schema.py             # Pydantic v2 output contract schemas
-├── tests/                    # Pytest unit and integration tests
-├── Dockerfile                # Clean environment reproduction container
-├── README.md                 # Setup and execution guide
-├── benchmark_report.md       # Multi-tier gate audit & head-to-head table
-├── capture_protocol.md       # Non-engineer capture protocol & device matrix
-├── compliance_matrix.md      # Requirement to file path audit matrix
-├── known_failure_modes.md    # System failure modes & engineering mitigations
-└── technical_report.md       # 6-page architectural technical report
-```
+10 of 14 gates report `SKIP` because laser ground truth for the benchmark property has not
+been recorded. They are not reported as passing.
