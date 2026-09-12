@@ -1,0 +1,11 @@
+{
+  "room_type": "box",
+  "gt_dimensions": {
+    "length_m": 5.2,
+    "width_m": 4.1,
+    "height_m": 2.5,
+    "floor_area_sqm": 21.32
+  },
+  "num_frames": 12,
+  "seed": 5599
+}

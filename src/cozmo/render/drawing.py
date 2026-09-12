@@ -61,7 +61,9 @@ class Circle:
     style: Style
 
 
-Primitive = Polygon | Line | Arc | Text | Circle
+from typing import Union
+
+Primitive = Union[Polygon, Line, Arc, Text, Circle]
 
 
 @dataclass

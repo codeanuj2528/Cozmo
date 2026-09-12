@@ -31,17 +31,25 @@ class PhotoCapture(CaptureSource):
         self.root = Path(root)
         self.room_folders: Dict[str, List[Path]] = {}
 
-        subdirs = [p for p in self.root.iterdir() if p.is_dir() and not p.name.startswith(".")]
-        if subdirs:
+        subdirs = [
+            p for p in self.root.iterdir()
+            if p.is_dir() and not p.name.startswith(".") and p.name.lower() not in ("depth", "confidence", "stray")
+        ]
+        if subdirs and any(s.name.lower() not in ("rgb",) for s in subdirs):
             for s in subdirs:
+                if s.name.lower() in ("rgb",):
+                    continue
                 imgs = sorted(
                     list(s.glob("*.jpg")) + list(s.glob("*.jpeg")) + list(s.glob("*.png"))
                 )
                 if imgs:
                     self.room_folders[s.name] = imgs
-        else:
+        
+        if not self.room_folders:
+            # Fall back to root or rgb directory
+            target_dir = self.root / "rgb" if (self.root / "rgb").exists() else self.root
             imgs = sorted(
-                list(self.root.glob("*.jpg")) + list(self.root.glob("*.jpeg")) + list(self.root.glob("*.png"))
+                list(target_dir.glob("*.jpg")) + list(target_dir.glob("*.jpeg")) + list(target_dir.glob("*.png"))
             )
             if imgs:
                 self.room_folders["room_01"] = imgs

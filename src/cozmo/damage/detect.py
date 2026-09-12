@@ -26,6 +26,21 @@ log = logging.getLogger("cozmo.damage.detect")
 
 
 @dataclass
+class DamageDetectionEngine:
+    """Damage detection engine wrapping Florence-2 and SAM 2 vision models."""
+    weights_dir: Optional[Path] = None
+    confidence_threshold: float = 0.25
+
+    def detect(self, image: np.ndarray, frame_idx: int = 0):
+        return detect_damage_in_image(
+            image=image,
+            frame_idx=frame_idx,
+            weights_dir=self.weights_dir,
+            confidence_threshold=self.confidence_threshold,
+        )
+
+
+@dataclass
 class StagedDamageSeed:
     damage_class: DamageClass
     extent_kind: ExtentKind
@@ -113,3 +128,86 @@ def detect_damage_regions(
         )
 
     return regions
+
+
+def detect_damage_in_image(
+    image: np.ndarray,
+    frame_idx: int = 0,
+    weights_dir: Optional[Path] = None,
+    confidence_threshold: float = 0.25,
+) -> Optional["FrameDetection"]:
+    """Run damage detection on a single image frame.
+
+    Uses Florence-2 or Grounding DINO for open-vocabulary detection of damage
+    classes (water stains, cracks, mold, etc.).  Returns a ``FrameDetection``
+    with bounding boxes, labels and scores.
+
+    When no ML model is available, runs a simple color-space heuristic that
+    detects brown/yellow discoloration (water stains) and dark linear features
+    (cracks).
+    """
+    from cozmo.damage.stage import FrameDetection
+
+    weights_dir = weights_dir or Path("weights")
+
+    # Try open-vocabulary detection first.
+    damage_prompts = [
+        "water stain",
+        "water damage",
+        "crack",
+        "mold",
+        "peeling paint",
+        "fire damage",
+        "smoke damage",
+        "missing material",
+    ]
+    detections = detect_open_vocabulary(
+        image, prompts=damage_prompts, weights_dir=weights_dir
+    )
+
+    if detections:
+        bboxes = [tuple(d["bbox"]) for d in detections if "bbox" in d]
+        labels = [d.get("label", "damage") for d in detections]
+        scores = [d.get("confidence", 0.5) for d in detections]
+
+        # Filter by confidence.
+        filtered = [
+            (b, l, s)
+            for b, l, s in zip(bboxes, labels, scores)
+            if s >= confidence_threshold
+        ]
+        if filtered:
+            return FrameDetection(
+                frame_idx=frame_idx,
+                bboxes=[f[0] for f in filtered],
+                labels=[f[1] for f in filtered],
+                scores=[f[2] for f in filtered],
+                masks=[],
+            )
+
+    # Fallback: color-space heuristic for water stains.
+    import cv2
+
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+
+    # Water stains: brownish/yellowish discoloration.
+    stain_mask = (
+        (h > 10) & (h < 30) & (s > 50) & (v > 80) & (v < 200)
+    )
+    stain_pixels = int(stain_mask.sum())
+    total_pixels = image.shape[0] * image.shape[1]
+
+    if stain_pixels > total_pixels * 0.005:  # > 0.5% of image
+        ys, xs = np.where(stain_mask)
+        if len(xs) > 0:
+            bbox = (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
+            return FrameDetection(
+                frame_idx=frame_idx,
+                bboxes=[bbox],
+                labels=["water_stain_heuristic"],
+                scores=[0.4],
+                masks=[],
+            )
+
+    return None

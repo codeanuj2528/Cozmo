@@ -1,0 +1,31 @@
+category,item_code,description,unit,unit_cost_usd,damage_class
+water,WTR-001,Water extraction and drying (standard),sf,3.50,water
+water,WTR-002,Dehumidification (per room per day),ea,85.00,water
+water,WTR-003,Anti-microbial treatment,sf,1.25,water
+water,WTR-004,Moisture barrier installation,sf,2.75,water
+mold,MLD-001,Mold remediation (surface),sf,12.50,mold
+mold,MLD-002,Mold remediation (structural),sf,28.00,mold
+mold,MLD-003,HEPA air filtration setup,ea,450.00,mold
+mold,MLD-004,Post-remediation clearance testing,ea,350.00,mold
+fire,FIR-001,Smoke damage cleaning (surface),sf,4.50,fire_smoke
+fire,FIR-002,Thermal fogging (odour removal),ea,375.00,fire_smoke
+fire,FIR-003,Soot removal and cleaning,sf,3.25,fire_smoke
+drywall,DRY-001,Drywall removal and replacement,sf,8.50,crack
+drywall,DRY-002,Drywall patching (small area),ea,125.00,crack
+drywall,DRY-003,Drywall taping and finishing,lf,2.25,crack
+paint,PNT-001,Prime and paint (standard wall),sf,2.50,stain
+paint,PNT-002,Texture matching and application,sf,3.75,stain
+paint,PNT-003,Wallpaper removal,sf,1.50,stain
+flooring,FLR-001,Carpet removal and disposal,sf,1.75,water
+flooring,FLR-002,Hardwood floor refinishing,sf,4.50,water
+flooring,FLR-003,Tile removal and replacement,sf,12.00,impact
+structural,STR-001,Structural assessment (engineer),ea,750.00,crack
+structural,STR-002,Foundation crack repair (epoxy injection),lf,25.00,crack
+structural,STR-003,Joist sistering/reinforcement,lf,45.00,impact
+ceiling,CLG-001,Ceiling drywall replacement,sf,9.50,water
+ceiling,CLG-002,Ceiling texture matching,sf,3.00,water
+ceiling,CLG-003,Popcorn ceiling removal,sf,2.25,stain
+insulation,INS-001,Insulation removal (wet/contaminated),sf,3.50,water
+insulation,INS-002,Insulation replacement (batt),sf,2.00,water
+demolition,DEM-001,Selective demolition,sf,5.50,missing_material
+demolition,DEM-002,Debris removal and disposal,ea,250.00,missing_material
