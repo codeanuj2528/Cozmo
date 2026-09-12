@@ -245,11 +245,13 @@ def render_svg(plan: PropertyPlan, artifacts: Optional[Any] = None) -> str:
 
 
 def save_plan_image(plan: PropertyPlan, artifacts: Optional[Any], out_path: Path) -> None:
+    from cozmo.render.backends import to_png
     svg_content = render_svg(plan, artifacts)
-    if out_path.suffix.lower() == ".svg":
-        out_path.write_text(svg_content)
-    else:
-        # Fallback to saving SVG or PNG rendering
-        svg_file = out_path.with_suffix(".svg")
-        svg_file.write_text(svg_content)
+    svg_file = out_path.with_suffix(".svg")
+    svg_file.write_text(svg_content)
+    if out_path.suffix.lower() == ".png":
+        drawing = build_plan_drawing(plan, show_intervals=True)
+        title = f"Floor Plan - Capture {plan.capture_id}"
+        subtitle = f"Tier: {plan.tier.value.upper()} | Total Floor Area: {plan.total_floor_area.value:.2f} m²"
+        to_png(drawing, out_path, title, subtitle)
 
