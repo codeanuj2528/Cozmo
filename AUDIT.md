@@ -271,12 +271,33 @@ the capture each number came from.
 An honest table of four measurable rows scores; a table of sixteen rows built on invented truth
 scores zero and taints the narrative report, which is exactly what the brief says it will do.
 
-### E1. Fix the video tier (30% — the walk-in test)
+### E1. Fix the video tier (30% — the walk-in test). Root cause found.
 
-526.51 m² is not a calibration problem, it is a scale failure. The examiners choose the tier on
-the day; if they choose video, this is the whole 30%. Also 972 s is too slow to run in front of
-anyone. Start with why only 103 frames come out of a 3.6 GB clip, and whether the monocular
-scale path runs at all before falling back.
+`IMG_1582.mp4` is **2160×3840 portrait, 119.95 fps, 33,158 frames, 276 s**. Two independent
+defects, and both are in the reader rather than the reconstruction:
+
+**Sampling is counted in frames, not seconds.** `io/video.py` uses
+`DEFAULT_STRIDE_FRAMES = 5` and `DEFAULT_MAX_FRAMES = 30`. Thirty frames at a stride of five
+spans 150 source frames, which at 120 fps is **1.25 seconds of a 276-second walkthrough —
+0.45% of it**. Even the 102 frames the recorded run used covers 4.25 s, 1.54%. The pipeline is
+reconstructing a whole flat from a few seconds of footage shot from one spot, which is the
+whole explanation for 2 rooms and a `surface_coverage` of 0.0015. A stride in frames is not a
+unit of camera motion: the same stride is 0.17 s at 30 fps and 0.04 s at 120 fps, and iPhones
+write both. **Sample on elapsed time, or better on estimated baseline.**
+
+**Intrinsics are guessed from the frame size.** `io/video.py:56` is
+`focal_px = max(self.width, self.height) * 0.82`, giving 3149 px here. For a portrait 4K frame
+from an iPhone main wide camera, roughly 70° across the 2160-pixel width, the focal length is
+about 1543 px. That is **2× too long**, and it is the same failure that produced the photo
+tier's +422%: too long a focal length compresses the cloud laterally while leaving depth
+alone, so the floor is no longer planar, the recovered camera height is wrong, and the
+camera-height scale correction is computed from that wrong height. 526.51 m² has that
+signature.
+
+Both are cheap to fix and both are testable without a laser: a sane footprint and a
+`surface_coverage` that is not 0.15% are necessary conditions, even if sufficiency needs the
+tape. **This is also the better fix-loop candidate than E5** — the root cause is identified
+and evidenced, the fix is small, and the predicted number is checkable.
 
 ### E2. Make the ceiling path honest, and the intervals physical (cheap, high credibility)
 
