@@ -28,6 +28,7 @@ import numpy as np
 from cozmo import __version__
 from cozmo.config import PipelineConfig
 from cozmo.geometry.assemble import (
+    adjacency_from_trajectory,
     RoomGeometry,
     build_room,
     match_adjacency,
@@ -329,6 +330,12 @@ def build_lidar_plan(
             cloud, levels.floor_height, levels.ceiling_height
         )
 
+    # Openings are detected against the walls as measured, before any snapping. Snapping
+    # rotates a wall by up to the snap tolerance, and six degrees moves the far end of a
+    # 4 m wall by 42 cm -- far outside the 5.5 cm band the elevation uses to decide which
+    # points lie on the wall. Detecting on snapped geometry silently loses openings: on
+    # the first real capture it took the count from 12 down to 3.
+    walls_as_measured = list(walls)
     snapped_count, snap_rotation = 0, 0.0
     if config.snap_walls_to_frame and walls:
         frame_angle = dominant_directions(walls)
@@ -371,7 +378,7 @@ def build_lidar_plan(
     timings["floorplan_s"] = time.perf_counter() - mark
 
     mark = time.perf_counter()
-    runs = merge_runs(walls)
+    runs = merge_runs(walls_as_measured)
     openings_by_wall = detect_all_openings(
         runs, cloud, levels.floor_height, levels.ceiling_height
     )
@@ -404,7 +411,17 @@ def build_lidar_plan(
         room_mask_list.append(mask)
         lookups[room_id] = lookup
 
-    adjacency = match_adjacency(rooms, lookups)
+    # A continuous capture knows which rooms connect because the operator walked between
+    # them. Doorway matching is kept as the fallback for captures with no trajectory.
+    adjacency = adjacency_from_trajectory(
+        rooms,
+        {r.room_id: m for r, m in zip(rooms, room_mask_list)},
+        occupancy.grid,
+        cameras,
+        lookups,
+    )
+    if not adjacency:
+        adjacency = match_adjacency(rooms, lookups)
 
     quality = _quality_report(
         source, cloud, keyframes, rooms, occupancy, tier, warnings
