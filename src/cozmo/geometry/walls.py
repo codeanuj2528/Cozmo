@@ -350,6 +350,91 @@ def _fuse_run(group: list[WallSegment]) -> WallSegment:
     )
 
 
+def snap_to_frame(
+    segments: list[WallSegment],
+    cloud: FusedCloud,
+    frame_angle_rad: float,
+    tolerance_rad: float = np.deg2rad(6.0),
+) -> tuple[list[WallSegment], int, float]:
+    """Rotate near-axis walls onto the building frame and refit their offsets.
+
+    This is the plane-anchored half of drift handling. A pose graph distributes the
+    trajectory error but leaves a residual yaw that rotates later rooms a few degrees
+    against earlier ones, and a few degrees of rotation on a 4 m wall is centimetres at its
+    ends. The prior that fixes it is the one fact about buildings that is almost always
+    true: walls are built parallel and perpendicular to each other.
+
+    Applied only where the data already agrees. A wall more than `tolerance_rad` off the
+    frame is left exactly as measured, because a genuinely angled wall exists and forcing it
+    square would be inventing geometry rather than correcting error. The offset is refit
+    from the wall's own points after rotation, so only the direction is taken from the
+    prior and the position stays measured.
+
+    Returns the walls, how many were snapped, and the mean rotation applied.
+    """
+    if not segments:
+        return segments, 0, 0.0
+
+    axes = [frame_angle_rad + i * np.pi / 2 for i in range(4)]
+    out: list[WallSegment] = []
+    snapped = 0
+    rotations: list[float] = []
+
+    for seg in segments:
+        angle = float(np.arctan2(seg.direction[1], seg.direction[0]))
+        deltas = [(abs((angle - a + np.pi) % (2 * np.pi) - np.pi), a) for a in axes]
+        delta, target = min(deltas)
+        if delta > tolerance_rad:
+            out.append(seg)
+            continue
+
+        direction = np.array([np.cos(target), np.sin(target)])
+        normal = np.array([-direction[1], direction[0]])
+        if normal @ seg.normal_xz < 0:
+            normal = -normal
+            direction = -direction
+
+        points = cloud.points[seg.point_indices]
+        weights = cloud.weight[seg.point_indices].astype(np.float64)
+        offset = float(np.average(points[:, [0, 2]] @ normal, weights=weights))
+        # Offset uncertainty after refitting: the weighted standard error of the points'
+        # distance along the new normal, which is what the reported wall length inherits.
+        residual = points[:, [0, 2]] @ normal - offset
+        wsum = weights.sum()
+        effective_n = float(wsum**2 / max((weights**2).sum(), 1e-12))
+        sigma = float(np.sqrt((weights * residual**2).sum() / wsum) / np.sqrt(max(effective_n, 1.0)))
+
+        t = points[:, [0, 2]] @ direction
+        base = normal * offset
+        plane = PlaneFit(
+            normal=np.array([normal[0], 0.0, normal[1]]),
+            offset=-offset,
+            sigma_offset=max(sigma, seg.plane.sigma_offset),
+            sigma_angle_rad=seg.plane.sigma_angle_rad,
+            inlier_count=seg.plane.inlier_count,
+            residual_rms=float(np.sqrt((weights * residual**2).sum() / wsum)),
+            effective_n=effective_n,
+        )
+        out.append(
+            WallSegment(
+                plane=plane,
+                direction=direction,
+                normal_xz=normal,
+                start=base + direction * float(t.min()),
+                end=base + direction * float(t.max()),
+                height_low=seg.height_low,
+                height_high=seg.height_high,
+                support_weight=seg.support_weight,
+                point_indices=seg.point_indices,
+                occupancy=seg.occupancy,
+            )
+        )
+        snapped += 1
+        rotations.append(delta)
+
+    return out, snapped, float(np.mean(rotations)) if rotations else 0.0
+
+
 def dominant_directions(segments: list[WallSegment], bin_deg: float = 0.5) -> float:
     """Rotation angle, in radians, that brings the dominant wall run onto the x axis.
 

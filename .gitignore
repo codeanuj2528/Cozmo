@@ -6,12 +6,13 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 
-# Large binaries: captures, model weights, run outputs.
+# Large binaries & temp runs
 data/captures/*
 !data/captures/.gitkeep
 weights/*
 !weights/.gitkeep
-runs/
+reports/
 *.zip
 *.mp4
 *.ply
+*.bin

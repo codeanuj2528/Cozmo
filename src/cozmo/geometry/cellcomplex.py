@@ -355,8 +355,25 @@ def _renumber_rooms(faces: list[Face]) -> None:
             f.room = mapping[f.room]
 
 
-def room_polygons(complex_: CellComplex, min_room_area_m2: float = 1.2) -> dict[int, Polygon]:
-    """Merge the faces of each room into one polygon."""
+MIN_INSCRIBED_RADIUS_M = 0.33
+
+
+def room_polygons(
+    complex_: CellComplex,
+    min_room_area_m2: float = 1.2,
+    min_inscribed_radius_m: float = MIN_INSCRIBED_RADIUS_M,
+) -> dict[int, Polygon]:
+    """Merge the faces of each room into one polygon.
+
+    Area alone does not separate a room from a sliver. Two wall lines that meet at a
+    shallow angle enclose a long tapering wedge which can carry several square metres and
+    is nowhere wide enough to stand in; unfiltered it swallows the corridor it lies along
+    and takes the rooms off that corridor with it.
+
+    The test is whether the room contains a disc a person could stand in. A negative buffer
+    is empty exactly when it does not, and a corridor at 0.9 m wide passes comfortably while
+    a wedge that is 20 cm across for most of its length does not.
+    """
     grouped: dict[int, list[Polygon]] = {}
     for face in complex_.faces:
         if face.interior and face.room >= 0:
@@ -369,6 +386,8 @@ def room_polygons(complex_: CellComplex, min_room_area_m2: float = 1.2) -> dict[
             continue
         merged = clean_polygon(merged)
         if merged.is_empty or merged.geom_type != "Polygon" or merged.area < min_room_area_m2:
+            continue
+        if merged.buffer(-min_inscribed_radius_m).is_empty:
             continue
         out[room] = merged
     return out

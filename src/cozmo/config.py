@@ -24,11 +24,14 @@ class PipelineConfig:
 
     canonical_rotation: bool = True
     drift_correction: bool = True
+    snap_walls_to_frame: bool = True
+    snap_tolerance_deg: float = 6.0
     detect_damage: bool = True
     build_scope: bool = True
 
     max_wall_lines: int = 44
     min_room_area_m2: float = 1.5
+    min_inscribed_radius_m: float = 0.33
 
     calibration_path: Path | None = Path("calibration/intervals.json")
     weights_dir: Path = Path("weights")
