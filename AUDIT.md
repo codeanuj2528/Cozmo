@@ -271,33 +271,63 @@ the capture each number came from.
 An honest table of four measurable rows scores; a table of sixteen rows built on invented truth
 scores zero and taints the narrative report, which is exactly what the brief says it will do.
 
-### E1. Fix the video tier (30% — the walk-in test). Root cause found.
+### E1. The video tier. Root cause found, and it is not a small fix.
 
-`IMG_1582.mp4` is **2160×3840 portrait, 119.95 fps, 33,158 frames, 276 s**. Two independent
-defects, and both are in the reader rather than the reconstruction:
+Regenerate with `.venv/bin/python scripts/diagnose_video.py <clip> --keyframes 120 [--consensus]`.
+That probe exists because a full video run **does not complete on a 16 GB machine** — it was
+OOM-killed twice, silently, with the wrapper still exiting 0. The 526.51 m² in the inventory
+above came from a run whose artifacts are no longer in `reports/`, so **that number is not
+currently reproducible**; everything below is.
 
-**Sampling is counted in frames, not seconds.** `io/video.py` uses
-`DEFAULT_STRIDE_FRAMES = 5` and `DEFAULT_MAX_FRAMES = 30`. Thirty frames at a stride of five
-spans 150 source frames, which at 120 fps is **1.25 seconds of a 276-second walkthrough —
-0.45% of it**. Even the 102 frames the recorded run used covers 4.25 s, 1.54%. The pipeline is
-reconstructing a whole flat from a few seconds of footage shot from one spot, which is the
-whole explanation for 2 rooms and a `surface_coverage` of 0.0015. A stride in frames is not a
-unit of camera motion: the same stride is 0.17 s at 30 fps and 0.04 s at 120 fps, and iPhones
-write both. **Sample on elapsed time, or better on estimated baseline.**
+**Two claims I made earlier in this audit were wrong, and I am retracting both.**
 
-**Intrinsics are guessed from the frame size.** `io/video.py:56` is
-`focal_px = max(self.width, self.height) * 0.82`, giving 3149 px here. For a portrait 4K frame
-from an iPhone main wide camera, roughly 70° across the 2160-pixel width, the focal length is
-about 1543 px. That is **2× too long**, and it is the same failure that produced the photo
-tier's +422%: too long a focal length compresses the cloud laterally while leaving depth
-alone, so the floor is no longer planar, the recovered camera height is wrong, and the
-camera-height scale correction is computed from that wrong height. 526.51 m² has that
-signature.
+*Retracted: "sampling covers only 1.25 s of the clip."* That described `io/video.py`, whose
+`DEFAULT_STRIDE_FRAMES = 5` and `DEFAULT_MAX_FRAMES = 30` do have that effect — but the
+pipeline does not use it for frames. `pipeline/video.py:extract_keyframes` sets
+`stride = total / wanted` and samples across the whole clip. Coverage was never the problem.
 
-Both are cheap to fix and both are testable without a laser: a sane footprint and a
-`surface_coverage` that is not 0.15% are necessary conditions, even if sufficiency needs the
-tape. **This is also the better fix-loop candidate than E5** — the root cause is identified
-and evidenced, the fix is small, and the predicted number is checkable.
+*Retracted: "the assumed focal length is 2× too long."* Measured, it is 410.9 px on a
+320-pixel working width, a **42.5° horizontal field of view**. For portrait 16:9 4K, where the
+2160-pixel side is the sensor's short axis, roughly 40° is correct. The intrinsics are fine.
+
+**What is actually wrong: `register_sequential` does not recover camera motion.** The clip is
+2160×3840 portrait, 119.95 fps, 33,158 frames, 276 s. Sampled at the pipeline's own 120
+keyframes and again at 40, with everything else held fixed:
+
+| | 40 keyframes (6.9 s apart) | 120 keyframes (2.3 s apart) |
+|---|---|---|
+| median step between keyframes | 1.81 m | **1.73 m** |
+| path length | 60.06 m | **207.51 m** |
+| vertical extent of trajectory | 6.70 m | **13.10 m** |
+| cloud bounding box | 17.4 × 11.4 × 12.6 m | 14.2 × 15.9 × **16.1 m** |
+| keyframes that failed to register | 9 of 40 | 13 of 120 |
+
+Tripling the temporal density leaves the median step **unchanged at ~1.7 m**. A real walk
+sampled 3× more often gives steps roughly 3× shorter. Invariance to the true baseline is the
+signature of a registration that is not converging on anything: ICP emits a displacement of
+roughly fixed magnitude whichever pair it is given. The corroborating absurdities are that the
+operator is credited with walking **207 m** inside a flat about 10 m across, and that the
+trajectory wanders **13.1 m vertically** in a single-storey property.
+
+So the footprint error is not a scale error to be calibrated out. There is no trajectory, and
+a 526 m² or 228 m² footprint is the bounding box of a cloud scattered along a path that was
+never taken. **ICP on independently-scaled monocular depth is the wrong instrument here**;
+recovering motion from a handheld clip needs feature correspondence and PnP between frames,
+which is a rewrite of the stage, not a patch to it.
+
+**Partial fix shipped:** `pipeline/video.py` collected each frame's scale provenance into
+`scale_sources` and then discarded it with `_ = scale_sources`, while every frame scaled itself
+off its own floor plane. At 120 keyframes only 28 of 120 resolve a floor at all; the other 92
+keep the backbone's raw output at factor 1.000, and the factors that are recovered span 0.470
+to 2.679 — a **5.71× spread**. ICP aligns rigidly, and no rigid transform reconciles clouds of
+different size. One consensus scale (median of the grounded frames, 0.857) is now applied to
+all of them. It is a real improvement and an honest one: registration failures fall from 13 to
+9 of 120 and the cloud's vertical extent from 16.1 m to 14.5 m. **It does not fix the tier**,
+and the table above is why.
+
+**Recommendation: demo the LiDAR tier, and declare the video tier as not working rather than
+shipping 526 m².** An examiner who picks video should be told the truth in the README before
+they run it.
 
 ### E2. Make the ceiling path honest, and the intervals physical (cheap, high credibility)
 

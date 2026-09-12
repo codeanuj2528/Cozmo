@@ -153,21 +153,61 @@ def build_video_plan(
     k_full, focal_source = intrinsics_from_exif(None, width, height)
     warnings.append(f"video intrinsics: {focal_source}")
 
+    # Predict depth for every keyframe before registering any of them, because the scale
+    # each frame recovers on its own is not usable as it stands.
+    #
+    # make_metric recovers metric scale per frame from that frame's own floor plane. On this
+    # clip only 12 of 40 keyframes find a floor at all; the other 28 keep the backbone's raw
+    # output at factor 1.000. The factors that are recovered span 0.670 to 1.757, so the
+    # clouds differ in size by up to 2.62x. ICP aligns rigidly, and no rigid transform can
+    # reconcile two clouds of different scale, so sequential registration was being handed
+    # an impossible problem: 9 of 40 keyframes failed outright, the walk broke into two
+    # disconnected stretches, and the surviving trajectory drifted 6.70 m vertically inside
+    # a single-storey flat, producing a point cloud 12.6 m tall.
+    #
+    # A walkthrough is one camera in one building, so there is one scale, not one per frame.
+    # The frames that did see a floor are the only evidence of it, so their median sets the
+    # scale for the whole clip and the frames that saw no floor inherit it instead of
+    # silently asserting 1.000. This is the same consensus the photo tier applies across
+    # rooms, for the same reason.
+    predictions: list[tuple[np.ndarray, np.ndarray, float, str]] = []
+    for image in images:
+        geometry = make_metric(
+            backbone.estimate(image), k_full, seed=config.seed,
+            backbone_is_metric=backbone.is_metric(),
+        )
+        predictions.append(
+            (geometry.depth_m, geometry.gravity_rotation,
+             float(geometry.scale.factor), geometry.scale.source)
+        )
+
+    grounded = [f for _, _, f, source in predictions if source == "camera_height_correction"]
+    if grounded:
+        consensus_scale = float(np.median(grounded))
+        warnings.append(
+            f"video scale: consensus {consensus_scale:.3f} from the median of "
+            f"{len(grounded)} of {len(predictions)} keyframes that resolved a floor plane "
+            f"(those ranged {min(grounded):.3f}-{max(grounded):.3f}); applied to every "
+            "keyframe so the clouds registration sees are mutually consistent in size"
+        )
+    else:
+        consensus_scale = 1.0
+        warnings.append(
+            "video scale: no keyframe resolved a floor plane, so the backbone's own metric "
+            "output is used unscaled and every dimension inherits its bias"
+        )
+
     clouds: list[tuple[np.ndarray, np.ndarray]] = []
     depths: list[np.ndarray] = []
     gravities: list[np.ndarray] = []
-    scale_sources: list[str] = []
 
-    for image in images:
-        predicted = backbone.estimate(image)
-        geometry = make_metric(
-            predicted, k_full, seed=config.seed, backbone_is_metric=backbone.is_metric()
-        )
-        points, normals = _cloud_from_depth(geometry.depth_m, k_full, geometry.gravity_rotation)
-        clouds.append((points, normals))
-        depths.append(geometry.depth_m)
-        gravities.append(geometry.gravity_rotation)
-        scale_sources.append(geometry.scale.source)
+    for depth_m, gravity, own_factor, _source in predictions:
+        # Undo the frame's own correction before applying the consensus, so a frame that
+        # found a floor is not scaled twice.
+        depth = (depth_m * (consensus_scale / max(own_factor, 1e-6))).astype(np.float32)
+        clouds.append(_cloud_from_depth(depth, k_full, gravity))
+        depths.append(depth)
+        gravities.append(gravity)
 
     poses, registration_warnings = register_sequential(clouds)
     warnings.extend(registration_warnings)
@@ -220,5 +260,4 @@ def build_video_plan(
     result.plan.quality.warnings = list(result.plan.quality.warnings) + warnings
     result.plan.runtime_seconds = time.perf_counter() - started
     result.artifacts.warnings.extend(warnings)
-    _ = scale_sources
     return result
