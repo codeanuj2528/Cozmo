@@ -78,6 +78,10 @@ def is_self_intersecting(points: list[list[float]]) -> bool:
 # A quantity that cannot physically be negative. Used for the interval lower-bound check.
 NON_NEGATIVE = ("area", "length", "height", "width", "perimeter")
 
+# Below this mean width (2 * area / perimeter) a region is not a room. Set just under the
+# narrowest space a person occupies -- a 0.75 m closet -- so genuine corridors survive.
+MIN_ROOM_MEAN_WIDTH_M = 0.70
+
 
 def audit_plan(path: Path) -> dict:
     plan = json.loads(path.read_text())
@@ -88,7 +92,7 @@ def audit_plan(path: Path) -> dict:
     zero_ceiling = 0
     negative_bound = 0
     area_mismatch = 0
-    impossible_wall = 0
+    sliver_rooms = 0
     selfint = 0
     ring_mismatch = 0
     total_openings = 0
@@ -127,15 +131,29 @@ def audit_plan(path: Path) -> dict:
                         f"floor_area of {reported_area:.2f} m2"
                     )
 
-            # A wall longer than the diagonal of a 1:4 box of the room's area is impossible.
+            # Mean width, 2 * area / perimeter. This replaces an earlier check that
+            # compared each wall length against the diagonal of a 1:4 box of the room's
+            # area and called anything longer "geometrically impossible". That check was
+            # wrong: it flagged c7d28f72c6 room_03 for holding 7.65 m walls in 4.48 m2,
+            # but that polygon is valid and simple and its area does match its ring. The
+            # region is a 0.31 m wide hairpin ribbon, which is a real defect but a
+            # different one, and the old test would also have failed any genuine corridor.
+            #
+            # Mean width measures the thing that is actually wrong and is scale-free. A
+            # region narrower than this on average is not a room a person stands in; it is
+            # a gap between two wall lines that segmentation handed a room id.
             if reported_area > 0:
-                limit = math.sqrt(reported_area * 4) * math.sqrt(1 + 1 / 16) * 1.35
-                for w in walls:
-                    if w["length"]["value"] > limit:
-                        impossible_wall += 1
+                perimeter = sum(
+                    math.dist(poly[i], poly[(i + 1) % len(poly)]) for i in range(len(poly))
+                ) if poly else 0.0
+                if perimeter > 0:
+                    mean_width = 2.0 * reported_area / perimeter
+                    if mean_width < MIN_ROOM_MEAN_WIDTH_M:
+                        sliver_rooms += 1
                         findings.append(
-                            f"{rid}: wall {w['wall_id']} is {w['length']['value']:.2f} m in a "
-                            f"room of {reported_area:.2f} m2 (geometric limit {limit:.2f} m)"
+                            f"{rid}: mean width {mean_width:.2f} m "
+                            f"(area {reported_area:.2f} m2, perimeter {perimeter:.2f} m) is "
+                            f"below {MIN_ROOM_MEAN_WIDTH_M} m, so this is a sliver rather than a room"
                         )
 
         # A ceiling that was never observed must be absent, not zero. `null` is the correct
@@ -227,7 +245,7 @@ def audit_plan(path: Path) -> dict:
         "floor_area_vs_polygon_mismatch": area_mismatch,
         "self_intersecting_rooms": selfint,
         "wall_ring_area_mismatch": ring_mismatch,
-        "geometrically_impossible_walls": impossible_wall,
+        "sliver_rooms": sliver_rooms,
         "disconnected_declared_adjacency": disconnected_adjacency,
         "findings": findings,
     }
@@ -255,7 +273,7 @@ def main() -> None:
 
     header = (
         f"{'capture':<22} {'tier':<6} {'rooms':>5} {'area m2':>8} {'open':>5} {'adj':>4} "
-        f"{'ceil=0':>7} {'neg lo':>7} {'selfint':>8} {'bad wall':>9} {'ring':>5} {'adj gap':>8}"
+        f"{'ceil=0':>7} {'neg lo':>7} {'selfint':>8} {'sliver':>7} {'ring':>5} {'adj gap':>8}"
     )
     print(header)
     print("-" * len(header))
@@ -264,7 +282,7 @@ def main() -> None:
             f"{str(r['capture_id'])[:22]:<22} {str(r['tier']):<6} {r['rooms']:>5} "
             f"{(r['floor_area_m2'] or 0):>8.2f} {r['openings']:>5} {r['adjacency']:>4} "
             f"{r['zero_ceiling_rooms']:>7} {r['negative_lower_bounds']:>7} "
-            f"{r['self_intersecting_rooms']:>8} {r['geometrically_impossible_walls']:>9} "
+            f"{r['self_intersecting_rooms']:>8} {r['sliver_rooms']:>7} "
             f"{r['wall_ring_area_mismatch']:>5} {r['disconnected_declared_adjacency']:>8}"
         )
 
