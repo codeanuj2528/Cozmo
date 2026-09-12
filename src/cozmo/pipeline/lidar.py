@@ -28,6 +28,7 @@ import numpy as np
 from cozmo import __version__
 from cozmo.config import PipelineConfig
 from cozmo.geometry.assemble import (
+    DEFAULT_POSE_SIGMA_M,
     adjacency_from_trajectory,
     RoomGeometry,
     build_room,
@@ -385,6 +386,11 @@ def build_lidar_plan(
     timings["openings_s"] = time.perf_counter() - mark
 
     tier = source.meta.tier
+    # What the drift stage could not remove is a real contribution to every dimension the
+    # plan reports, so it is carried into the intervals rather than left in the drift
+    # report alone.
+    pose_residual_m = max(float(drift.residual_after_m) * 0.02, DEFAULT_POSE_SIGMA_M)
+
     rooms: list[Room] = []
     lookups: dict[str, dict] = {}
     room_mask_list: list[np.ndarray] = []
@@ -405,7 +411,8 @@ def build_lidar_plan(
             mask.sum() * occupancy.grid.cell_area / max(polygon.area, 1e-6)
         )
         room, lookup = build_room(
-            geometry, runs, openings_by_wall, per_room, book, tier, observed
+            geometry, runs, openings_by_wall, per_room, book, tier, observed,
+            pose_sigma_m=pose_residual_m,
         )
         rooms.append(room)
         room_mask_list.append(mask)

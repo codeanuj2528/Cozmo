@@ -20,6 +20,11 @@ from cozmo.schema import (
 log = logging.getLogger("cozmo.scope.generate")
 
 
+# Scope quantities inherit the uncertainty of the damage extent they are derived from and
+# nothing has been conformally calibrated for them, so they report PRIOR. They previously
+# reported CONFORMAL on a hardcoded plus-or-minus ten percent, inside plans whose own
+# calibration report said fitted_on="uncalibrated" -- the same falsehood the calibrate
+# command used to write, in a second place.
 def generate_scope_items(
     damage_regions: Sequence[DamageRegion], concealed_flags: Sequence[ConcealedFlag]
 ) -> List[ScopeItem]:
@@ -42,7 +47,7 @@ def generate_scope_items(
                         hi=round(val_sf * 1.1, 2),
                         unit="SF",
                         coverage=0.90,
-                        method=IntervalMethod.CONFORMAL,
+                        method=IntervalMethod.PRIOR,
                     ),
                     driver_damage_ids=[dmg.damage_id],
                     rationale=f"Water stain observed covering {dmg.extent.value:.2f} m2 surface area",
@@ -64,7 +69,7 @@ def generate_scope_items(
                         hi=round(val_lf * 1.1, 2),
                         unit="LF",
                         coverage=0.90,
-                        method=IntervalMethod.CONFORMAL,
+                        method=IntervalMethod.PRIOR,
                     ),
                     driver_damage_ids=[dmg.damage_id],
                     rationale=f"Crack detected spanning {dmg.extent.value:.2f} linear metres",
