@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -103,10 +103,14 @@ def _prepare_image(path: Path) -> tuple[np.ndarray, np.ndarray] | None:
     return rgb, small
 
 
+_DEPTH_CACHE: dict[str, np.ndarray] = {}
+
+
 def build_room_frames(
     image_paths: list[Path],
     backbone,
     config: PipelineConfig,
+    fallback_scale: float | None = None,
 ) -> tuple[list[Frame], dict[int, np.ndarray], list[str], list[str]]:
     """Depth, level, scale and register one room's stills into posed frames."""
     warnings: list[str] = []
@@ -133,7 +137,12 @@ def build_room_frames(
         k_small = scale_intrinsics(
             k_full, (full.shape[1], full.shape[0]), (small.shape[1], small.shape[0])
         )
-        predicted = backbone.estimate(small)
+        cache_key = str(path)
+        if cache_key in _DEPTH_CACHE:
+            predicted = _DEPTH_CACHE[cache_key]
+        else:
+            predicted = backbone.estimate(small)
+            _DEPTH_CACHE[cache_key] = predicted
         geometry = make_metric(
             predicted, k_small, seed=config.seed, backbone_is_metric=backbone.is_metric()
         )
@@ -168,6 +177,12 @@ def build_room_frames(
         warnings.append(
             f"room scale {room_scale:.3f} from {len(confident)} of {len(pending)} photographs "
             f"that showed enough floor; applied to all"
+        )
+    elif fallback_scale is not None:
+        room_scale = fallback_scale
+        warnings.append(
+            f"no photograph in this room showed enough floor to recover scale; "
+            f"using property consensus scale {fallback_scale:.3f} from other rooms"
         )
     else:
         warnings.append(
@@ -320,10 +335,29 @@ def build_photo_plan(
 
     reconstructions: list[RoomReconstruction] = []
     all_scale_sources: list[str] = []
+    property_scales: list[float] = []
+
+    # First pass: build room frames and collect camera height scales
+    room_data = []
     for ordinal, (name, paths) in enumerate(sorted(folders.items()), start=1):
         room_id = f"room_{ordinal:02d}"
         frames, images, scale_sources, room_warnings = build_room_frames(paths, backbone, config)
         all_scale_sources.extend(scale_sources)
+        room_data.append((room_id, name, paths, frames, images, scale_sources, room_warnings))
+
+    # Collect confident property scale consensus from any room that found floor
+    property_scales: list[float] = []
+    for _, _, _, _, _, _, room_warnings in room_data:
+        for w in room_warnings:
+            if "room scale " in w:
+                try:
+                    sc = float(w.split("room scale ")[1].split(" ")[0])
+                    property_scales.append(sc)
+                except Exception:
+                    pass
+    known_property_scale: float | None = float(np.median(property_scales)) if property_scales else None
+
+    for room_id, name, paths, frames, images, scale_sources, room_warnings in room_data:
         if not frames:
             reconstructions.append(
                 RoomReconstruction(room_id, name, None, 0, 0, scale_sources, room_warnings)
@@ -340,25 +374,41 @@ def build_photo_plan(
         )
         try:
             result = build_lidar_plan(room_source, room_config, book)
-        except Exception as exc:
-            warnings.append(f"{name}: reconstruction failed ({exc})")
-            reconstructions.append(
-                RoomReconstruction(room_id, name, None, len(frames), 0, scale_sources, room_warnings)
+            rooms = result.plan.rooms
+        except Exception:
+            rooms = []
+
+        largest = max(rooms, key=lambda r: r.floor_area.value) if rooms else None
+        reason = _implausible(largest) if largest else "no_room"
+
+        # If native room reconstruction failed or was implausible, retry with property scale consensus
+        if (reason or not rooms) and known_property_scale is not None:
+            retry_frames, retry_images, retry_sources, retry_warnings = build_room_frames(
+                paths, backbone, config, fallback_scale=known_property_scale
             )
-            continue
+            if retry_frames:
+                retry_source = PosedFrameSource(
+                    frames=retry_frames,
+                    capture_id=f"{source.meta.capture_id}:{name}",
+                    tier=Tier.PHOTO,
+                    device_model=source.meta.device_model,
+                    images=retry_images,
+                )
+                try:
+                    retry_result = build_lidar_plan(retry_source, room_config, book)
+                    retry_rooms = retry_result.plan.rooms
+                    if retry_rooms:
+                        retry_largest = max(retry_rooms, key=lambda r: r.floor_area.value)
+                        retry_reason = _implausible(retry_largest)
+                        if not retry_reason:
+                            rooms = retry_rooms
+                            largest = retry_largest
+                            reason = None
+                            room_warnings = retry_warnings
+                except Exception:
+                    pass
 
-        rooms = result.plan.rooms
-        if not rooms:
-            warnings.append(f"{name}: no room recovered from {len(frames)} photographs")
-            reconstructions.append(
-                RoomReconstruction(room_id, name, None, len(frames), len(frames), scale_sources, room_warnings)
-            )
-            continue
-
-        largest = max(rooms, key=lambda r: r.floor_area.value)
-
-        reason = _implausible(largest)
-        if reason:
+        if not rooms or reason:
             warnings.append(
                 f"{name}: reconstruction rejected as physically implausible ({reason}); "
                 f"reported as not reconstructed rather than published"
