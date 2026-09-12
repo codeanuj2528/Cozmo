@@ -13,9 +13,8 @@ import cv2
 import numpy as np
 
 from cozmo.io.discover import find_videos
-from cozmo.io.base import CaptureMeta, CaptureSource, Frame, Provenance
+from cozmo.io.base import CaptureMeta, CaptureSource, Frame
 from cozmo.schema import Tier
-from cozmo.util.transforms import scale_intrinsics
 
 log = logging.getLogger("cozmo.io.video")
 
@@ -89,45 +88,14 @@ class VideoCapture(CaptureSource):
         return indices
 
     def frames(self, indices: Optional[List[int]] = None) -> Iterator[Frame]:
-        depth_w, depth_h = 256, 192
-        k_depth = scale_intrinsics(self.k_rgb, (self.width, self.height), (depth_w, depth_h))
-
-        target_indices = self._selected_indices if indices is None else indices
-
-        for idx, f_idx in enumerate(target_indices):
-            angle = (idx / max(len(target_indices), 1)) * 2.0 * np.pi * 0.5
-            tx = 1.5 * np.sin(angle)
-            ty = 1.2
-            tz = 1.5 * np.cos(angle)
-
-            z_axis = np.array([-tx, 0, -tz])
-            z_axis /= np.linalg.norm(z_axis) + 1e-8
-            x_axis = np.cross(np.array([0, 1, 0]), z_axis)
-            x_axis /= np.linalg.norm(x_axis) + 1e-8
-            y_axis = np.cross(z_axis, x_axis)
-
-            rot = np.column_stack([x_axis, y_axis, z_axis])
-            pose = np.eye(4)
-            pose[:3, :3] = rot
-            pose[:3, 3] = [tx, ty, tz]
-
-            depth_m = np.full((depth_h, depth_w), 2.5, dtype=np.float32)
-            confidence = np.full((depth_h, depth_w), 2, dtype=np.uint8)
-            sigma = np.full((depth_h, depth_w), 0.03, dtype=np.float32)
-
-            yield Frame(
-                index=idx,
-                timestamp=f_idx / self.fps,
-                k_depth=k_depth,
-                k_rgb=self.k_rgb,
-                rgb_size=(self.width, self.height),
-                depth=depth_m,
-                depth_sigma=sigma,
-                confidence=confidence,
-                pose=pose,
-                depth_provenance=Provenance.ESTIMATED,
-                pose_provenance=Provenance.ESTIMATED,
-            )
+        # This class only identifies the clip. Depth and pose are predicted in
+        # `pipeline.video.build_video_plan`, which reads the file itself. Inventing a
+        # circular orbit of 2.5 m depths here used to silently produce a 500 m2 plan
+        # if anything consumed these frames.
+        raise RuntimeError(
+            "VideoCapture.frames() does not produce depth or poses. "
+            "Run the video tier through cozmo.pipeline.reconstruct / build_video_plan."
+        )
 
     def load_rgb(self, frame: Frame) -> np.ndarray:
         return np.zeros((self.height, self.width, 3), dtype=np.uint8)

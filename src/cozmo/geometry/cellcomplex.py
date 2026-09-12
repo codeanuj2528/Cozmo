@@ -42,6 +42,10 @@ INTERIOR_EVIDENCE_THRESHOLD = 0.22
 WALL_SUPPORT_THRESHOLD = 0.45
 WALL_PROXIMITY_M = 0.14
 MIN_ROOM_AREA_M2 = 1.5
+# A doorway is narrower than this. A shared boundary whose unsupported stretch is wider
+# is an open span (an L-shaped room, a missing wall, furniture that looked like a
+# partition) and the faces either side are one room.
+MAX_DOOR_WIDTH_M = 1.60
 
 
 @dataclass
@@ -206,6 +210,32 @@ def _shared_boundaries(label_raster: np.ndarray) -> dict[tuple[int, int], list[t
     return pairs
 
 
+def _unsupported_span_m(
+    cells: np.ndarray, grid: Grid2D, segments: list[WallSegment]
+) -> float:
+    """Length of the longest stretch of a shared boundary that is not on a wall.
+
+    Points are projected onto the boundary's own principal axis so the span is a
+    length in metres, not a count of raster cells.
+    """
+    if len(cells) < 2:
+        return 0.0
+    world = grid.to_world(cells.astype(float))
+    supported = np.zeros(len(world), dtype=bool)
+    for seg in segments:
+        rel = world - seg.start
+        t = rel @ seg.direction
+        perp = np.abs(rel @ seg.normal_xz)
+        supported |= (t >= -0.05) & (t <= seg.length + 0.05) & (perp <= WALL_PROXIMITY_M)
+    open_pts = world[~supported]
+    if len(open_pts) < 2:
+        return 0.0
+    centred = open_pts - open_pts.mean(axis=0)
+    _, _, vt = np.linalg.svd(centred, full_matrices=False)
+    along = centred @ vt[0]
+    return float(along.max() - along.min())
+
+
 def _wall_support(cells: np.ndarray, grid: Grid2D, segments: list[WallSegment]) -> float:
     """Fraction of a shared boundary that runs along observed wall material."""
     if len(cells) == 0 or not segments:
@@ -257,6 +287,15 @@ def _assign_rooms(
         # punches through it; a boundary with nothing behind it is an artefact of extending
         # a wall line across the arrangement, and the faces either side are one room.
         if support < WALL_SUPPORT_THRESHOLD:
+            union(a, b)
+            continue
+        # A wall line that continues across an open span scores as "supported" because
+        # the line is near the cells, even when most of those cells have no wall
+        # material on them. The longest unsupported stretch is the opening; if it is
+        # wider than a door the faces are one room. This is how the assignment
+        # single-room scan was being cut into two.
+        span = _unsupported_span_m(np.array(cells), grid, segments)
+        if span > MAX_DOOR_WIDTH_M:
             union(a, b)
 
     roots = {}
@@ -388,6 +427,61 @@ def room_polygons(
         if merged.is_empty or merged.geom_type != "Polygon" or merged.area < min_room_area_m2:
             continue
         if merged.buffer(-min_inscribed_radius_m).is_empty:
+            continue
+        out[room] = merged
+    return _merge_diagonal_splits(out)
+
+
+def _merge_diagonal_splits(
+    polygons: dict[int, Polygon],
+    min_span_m: float = MAX_DOOR_WIDTH_M,
+    strip_width_m: float = 0.25,
+) -> dict[int, Polygon]:
+    """Join rooms that are the same space cut by a wall line.
+
+    A real partition overlap is a long thin strip (the wall thickness). An L-shaped
+    room sliced by a wall line that continues across open floor overlaps in a fat
+    region whose shorter side is metres, not centimetres. Only the second case merges.
+    """
+    keys = list(polygons)
+    if len(keys) < 2:
+        return polygons
+    parent = {k: k for k in keys}
+
+    def find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for i, a in enumerate(keys):
+        for b in keys[i + 1 :]:
+            pa, pb = polygons[a], polygons[b]
+            inter = pa.intersection(pb)
+            if inter.is_empty or inter.area < 1e-4:
+                inter = pa.buffer(0.03).intersection(pb.buffer(0.03))
+            if inter.is_empty:
+                continue
+            minx, miny, maxx, maxy = inter.bounds
+            sx, sy = maxx - minx, maxy - miny
+            if min(sx, sy) < strip_width_m and max(sx, sy) > 1.0:
+                continue
+            if max(sx, sy) >= min_span_m:
+                union(a, b)
+
+    groups: dict[int, list[Polygon]] = {}
+    for k in keys:
+        groups.setdefault(find(k), []).append(polygons[k])
+    out: dict[int, Polygon] = {}
+    for room, polys in groups.items():
+        merged = unary_union(polys)
+        merged = clean_polygon(merged)
+        if merged.is_empty or merged.geom_type != "Polygon":
             continue
         out[room] = merged
     return out

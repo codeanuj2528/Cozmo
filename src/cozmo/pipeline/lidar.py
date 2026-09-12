@@ -32,6 +32,7 @@ from cozmo.geometry.assemble import (
     adjacency_from_trajectory,
     RoomGeometry,
     build_room,
+    close_declared_gaps,
     match_adjacency,
     room_levels,
     total_area,
@@ -429,6 +430,7 @@ def build_lidar_plan(
     )
     if not adjacency:
         adjacency = match_adjacency(rooms, lookups)
+    warnings.extend(close_declared_gaps(rooms, adjacency))
 
     quality = _quality_report(
         source, cloud, keyframes, rooms, occupancy, tier, warnings
