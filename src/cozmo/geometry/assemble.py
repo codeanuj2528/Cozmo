@@ -145,11 +145,19 @@ def build_room(
     ring = np.asarray(polygon.exterior.coords)[:-1]
     interior_point = np.array(polygon.representative_point().coords[0])
 
-    height_value = levels.height if levels.height is not None else 0.0
-    height_sigma = levels.sigma_height
-    ceiling_measure = book.measure(
-        "ceiling_height", height_value, tier, "m", propagated_sigma=height_sigma
+    # A ceiling that was never observed has no height. Emitting 0.0 here made the absence
+    # of a measurement indistinguishable from a measurement of zero, and it propagated: the
+    # wall areas below became 0.0 m2 and the plan published a ceiling of 0.0 m with an
+    # interval that bracketed it. `levels.py` already declines to invent a height, and
+    # `render/plan.py` already draws "ceiling unmeasured"; only the output contract lied.
+    ceiling_measure = (
+        book.measure(
+            "ceiling_height", levels.height, tier, "m", propagated_sigma=levels.sigma_height
+        )
+        if levels.height is not None
+        else None
     )
+    height_value = levels.height
 
     wall_objects: list[Wall] = []
     surfaces: list[Surface] = []
@@ -230,10 +238,14 @@ def build_room(
                 surface_id=surface_id,
                 room_id=geometry.room_id,
                 type=SurfaceType.WALL,
-                area=book.measure(
-                    "wall_area", length * max(height_value, 0.0), tier, "m2",
-                    propagated_sigma=None,
-                    floor_half_width=0.05 * length * max(height_value, 0.1),
+                area=(
+                    book.measure(
+                        "wall_area", length * height_value, tier, "m2",
+                        propagated_sigma=None,
+                        floor_half_width=0.05 * length * height_value,
+                    )
+                    if height_value is not None
+                    else None
                 ),
                 plane=plane,
             )

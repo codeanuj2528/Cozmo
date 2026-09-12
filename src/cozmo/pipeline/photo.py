@@ -293,8 +293,8 @@ def _implausible(room) -> str | None:
     if not (PLAUSIBLE_ROOM_AREA_M2[0] <= area <= PLAUSIBLE_ROOM_AREA_M2[1]):
         return f"floor area {area:.1f} m2 outside {PLAUSIBLE_ROOM_AREA_M2[0]:.0f}-{PLAUSIBLE_ROOM_AREA_M2[1]:.0f} m2"
 
-    height = room.ceiling_height.value
-    if height > 0 and not (PLAUSIBLE_CEILING_M[0] <= height <= PLAUSIBLE_CEILING_M[1]):
+    height = room.ceiling_height.value if room.ceiling_height is not None else None
+    if height is not None and height > 0 and not (PLAUSIBLE_CEILING_M[0] <= height <= PLAUSIBLE_CEILING_M[1]):
         return f"ceiling height {height:.2f} m outside {PLAUSIBLE_CEILING_M[0]:.1f}-{PLAUSIBLE_CEILING_M[1]:.1f} m"
 
     if room.polygon:

@@ -193,7 +193,7 @@ def collect_residuals(
             continue
 
         actual_height = truth.scalar(capture_id, name, "ceiling_height")
-        if actual_height is not None and room.ceiling_height.value > 0:
+        if actual_height is not None and room.ceiling_height is not None and room.ceiling_height.value > 0:
             add("ceiling_height", room.ceiling_height.value, actual_height)
 
         truth_walls = [r.value_m for r in truth.values(capture_id, name, "wall_length")]

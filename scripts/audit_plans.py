@@ -138,9 +138,10 @@ def audit_plan(path: Path) -> dict:
                             f"room of {reported_area:.2f} m2 (geometric limit {limit:.2f} m)"
                         )
 
-        # ceiling reported as an exact zero
-        ch = room["ceiling_height"]
-        if ch["value"] == 0.0:
+        # A ceiling that was never observed must be absent, not zero. `null` is the correct
+        # answer and is not counted as a defect; an explicit 0.0 is.
+        ch = room.get("ceiling_height")
+        if ch is not None and ch.get("value") == 0.0:
             zero_ceiling += 1
             findings.append(
                 f"{rid}: ceiling_height reported as 0.0 m with interval "

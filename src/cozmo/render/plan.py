@@ -136,7 +136,7 @@ def _draw_room_label(drawing: Drawing, room, show_intervals: bool) -> None:
     drawing.add(
         Text(tuple(centre + np.array([0.0, 0.02])), f"{room.floor_area.value:.2f} m2", size=11)
     )
-    if room.ceiling_height.value > 0:
+    if room.ceiling_height is not None and room.ceiling_height.value > 0:
         text = f"h {room.ceiling_height.value:.3f} m"
         if show_intervals:
             text += f"  [{room.ceiling_height.lo:.3f}, {room.ceiling_height.hi:.3f}]"

@@ -121,7 +121,7 @@ def gate_ceiling_height(plan: PropertyPlan, truth: GroundTruth, capture_id: str)
         if name is None:
             continue
         actual = truth.scalar(capture_id, name, "ceiling_height")
-        if actual is None or room.ceiling_height.value <= 0:
+        if actual is None or room.ceiling_height is None or room.ceiling_height.value <= 0:
             continue
         errors.append((name, abs(room.ceiling_height.value - actual)))
 
@@ -248,7 +248,7 @@ def gate_interval_coverage(plan: PropertyPlan, truth: GroundTruth, capture_id: s
                     if wall is not None:
                         checks.append((wall.length, actual))
         for measure, actual in checks:
-            if actual is None or measure.value <= 0:
+            if measure is None or actual is None or measure.value <= 0:
                 continue
             total += 1
             half_widths.append(measure.half_width)
@@ -426,9 +426,9 @@ def gate_repeatability(
             worst = max(worst, difference)
             if difference <= REPEATABILITY_ABS_M or difference <= REPEATABILITY_REL * max(x, y):
                 within += 1
-        ha, hb = rooms_a[name].ceiling_height.value, rooms_b[name].ceiling_height.value
-        if ha > 0 and hb > 0:
-            ceiling_spread = max(ceiling_spread, abs(ha - hb))
+        ca, cb = rooms_a[name].ceiling_height, rooms_b[name].ceiling_height
+        if ca is not None and cb is not None and ca.value > 0 and cb.value > 0:
+            ceiling_spread = max(ceiling_spread, abs(ca.value - cb.value))
 
     fraction = within / max(total, 1)
     ceiling_ok = ceiling_spread <= CEILING_SPREAD_TOLERANCE_M

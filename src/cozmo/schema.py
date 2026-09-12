@@ -93,7 +93,10 @@ class Wall(BaseModel):
     start: tuple[float, float]
     end: tuple[float, float]
     length: Measure
-    height: Measure
+    height: Measure | None = Field(
+        default=None,
+        description="Floor to ceiling. None when the ceiling was never observed.",
+    )
     plane: Plane
     point_support: int = Field(description="Number of observed 3D points that fit this wall plane.")
 
@@ -102,7 +105,10 @@ class Surface(BaseModel):
     surface_id: str
     room_id: str
     type: SurfaceType
-    area: Measure
+    area: Measure | None = Field(
+        default=None,
+        description="None for a wall whose height is unmeasured: length alone does not give area.",
+    )
     plane: Plane
 
 
@@ -113,7 +119,14 @@ class Room(BaseModel):
     walls: list[Wall]
     surfaces: list[Surface]
     openings: list[Opening]
-    ceiling_height: Measure
+    ceiling_height: Measure | None = Field(
+        default=None,
+        description=(
+            "None when no ceiling surface was observed. Previously this was emitted as "
+            "0.0 m with an interval of [-0.03, 0.03], which reports the absence of a "
+            "measurement as a measurement, and is the confident garbage the brief penalises."
+        ),
+    )
     floor_area: Measure
     perimeter: Measure
     observation_quality: float = Field(ge=0.0, le=1.0)

@@ -136,10 +136,21 @@ class IntervalBook:
             method = IntervalMethod.PRIOR
 
         half = max(float(half), float(floor_half_width))
+
+        # Every quantity in this schema is a length, an area or a height, and none of them
+        # can be negative. An interval that runs below zero is not conservative, it is
+        # wrong: it assigns probability to a wall of negative length. Before this clamp the
+        # five real captures published 167 such bounds, including wall areas of
+        # 0.000 m2 [-0.150, 0.150] and ceiling heights of 0.000 m [-0.030, 0.030].
+        #
+        # Truncating at zero leaves the interval asymmetric about the point estimate, which
+        # is correct for a quantity bounded below: the information that a length cannot be
+        # negative is real information and the interval should carry it.
+        lo = max(0.0, float(value) - half)
         return Measure(
             value=float(value),
-            lo=float(value - half),
-            hi=float(value + half),
+            lo=lo,
+            hi=float(value) + half,
             unit=unit,
             coverage=self.coverage,
             method=method,
