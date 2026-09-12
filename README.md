@@ -13,8 +13,8 @@ A production-grade, multi-tier indoor capture pipeline that transforms consumer 
 
 ### 1. Clone Repository & Setup Virtual Environment
 ```bash
-git clone https://github.com/anuj/cozmo.git
-cd cozmo
+git clone https://github.com/codeanuj2528/Cozmo.git
+cd Cozmo
 
 # Create Python 3.12 environment
 python3.12 -m venv .venv
@@ -23,6 +23,12 @@ source .venv/bin/activate
 # Install package with dependencies
 pip install -e ".[ml,dev]" open3d
 ```
+
+---
+
+## Sample Rendered Output
+
+![Sample Rendered Architectural 2D Floor Plan](docs/images/sample_floorplan.png)
 
 ---
 
