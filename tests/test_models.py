@@ -1,4 +1,4 @@
-"""Tests for neural model loader wrappers (ZoeDepth, Grounding DINO, SAM 2, VGGT, LightGlue)."""
+"""Tests for neural model loader wrappers (Depth Anything v2, Florence-2, ZoeDepth, Grounding DINO, SAM 2, VGGT, LightGlue)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 
 from cozmo.models import (
+    load_depth_anything_v2_model,
+    load_florence2_model,
     load_zoedepth_model,
     load_grounding_dino_model,
     load_sam2_model,
@@ -17,6 +19,14 @@ from cozmo.models import (
 
 
 def test_model_availability_checks():
+    avail_v2, msg_v2 = load_depth_anything_v2_model(Path("non_existent_weights"))
+    assert not avail_v2
+    assert "Depth Anything v2 weights not found" in msg_v2
+
+    avail_florence, msg_florence = load_florence2_model(Path("non_existent_weights"))
+    assert not avail_florence
+    assert "Florence-2 weights not found" in msg_florence
+
     avail, msg = load_zoedepth_model(Path("non_existent_weights"))
     assert not avail
     assert "ZoeDepth weights not found" in msg

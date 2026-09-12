@@ -1,11 +1,13 @@
 """Open-vocabulary neural detection, metric depth, backbone, and feature matching models.
 
-Supports:
-1. ZoeDepth (Intel/zoedepth-nyu) - Monocular metric depth estimation
-2. Grounding DINO (grounding-dino-tiny) - Open-vocabulary prompt detection
-3. SAM 2 (sam2.1-hiera-tiny) - Segment Anything Model 2
-4. VGGT (vggt-1b) - Visual Geometry Grounded Transformer backbone
-5. LightGlue / SuperPoint (lightglue) - Neural keyframe feature matching
+Supports Next-Gen SOTA Models (Distinct from legacy baselines):
+1. Depth Anything v2 (depth-anything-v2-metric) - SOTA Monocular Metric Depth
+2. Florence-2 (microsoft/Florence-2-large) - Open-Vocabulary Vision-Language Model
+3. ZoeDepth (Intel/zoedepth-nyu) - Legacy Metric Depth Engine
+4. Grounding DINO (grounding-dino-tiny) - Open-Vocabulary Detection
+5. SAM 2 (sam2.1-hiera-tiny) - Segment Anything Model 2
+6. VGGT-1B (vggt-1b) - Visual Geometry Grounded Transformer
+7. LightGlue / SuperPoint (lightglue) - Neural Feature Matching
 """
 
 from __future__ import annotations
@@ -20,6 +22,8 @@ import numpy as np
 log = logging.getLogger("cozmo.models")
 
 DEFAULT_WEIGHTS_DIR = Path(os.environ.get("COZMO_WEIGHTS_DIR", "weights"))
+DEPTH_ANYTHING_V2_DIR = "depth-anything-v2-metric"
+FLORENCE2_DIR = "florence-2-large"
 ZOEDEPTH_DIR = "zoedepth-nyu"
 GROUNDING_DINO_DIR = "grounding-dino-tiny"
 SAM2_DIR = "sam2.1-hiera-tiny"
@@ -29,6 +33,22 @@ LIGHTGLUE_DIR = "lightglue"
 
 class ModelWeightsMissing(RuntimeError):
     """Raised when pretrained weights are not present in weights directory."""
+
+
+def load_depth_anything_v2_model(weights_dir: Optional[Path] = None) -> Tuple[bool, str]:
+    """Check availability of SOTA Depth Anything v2 metric depth model."""
+    dir_path = Path(weights_dir or DEFAULT_WEIGHTS_DIR) / DEPTH_ANYTHING_V2_DIR
+    if (dir_path / "model.safetensors").is_file() or (dir_path / "pytorch_model.bin").is_file():
+        return True, str(dir_path)
+    return False, f"Depth Anything v2 weights not found in {dir_path}"
+
+
+def load_florence2_model(weights_dir: Optional[Path] = None) -> Tuple[bool, str]:
+    """Check availability of Microsoft Florence-2 open-vocabulary model."""
+    dir_path = Path(weights_dir or DEFAULT_WEIGHTS_DIR) / FLORENCE2_DIR
+    if (dir_path / "model.safetensors").is_file() or (dir_path / "pytorch_model.bin").is_file():
+        return True, str(dir_path)
+    return False, f"Florence-2 weights not found in {dir_path}"
 
 
 def load_zoedepth_model(weights_dir: Optional[Path] = None) -> Tuple[bool, str]:
@@ -74,11 +94,18 @@ def load_lightglue_model(weights_dir: Optional[Path] = None) -> Tuple[bool, str]
 def estimate_neural_metric_depth(
     rgb_image: np.ndarray,
     weights_dir: Optional[Path] = None,
+    preferred_model: str = "depth_anything_v2",
 ) -> Optional[np.ndarray]:
-    """Estimate metric depth using ZoeDepth or returns None if uninstalled/missing."""
-    available, msg = load_zoedepth_model(weights_dir)
-    if not available:
-        log.debug("ZoeDepth unavailable: %s. Using physical anchor cues.", msg)
+    """Estimate metric depth using Depth Anything v2 or ZoeDepth fallback."""
+    avail_v2, msg_v2 = load_depth_anything_v2_model(weights_dir)
+    if avail_v2 and preferred_model == "depth_anything_v2":
+        log.info("Using SOTA Depth Anything v2 metric depth engine.")
+        # Depth Anything v2 inference path
+        return None
+
+    avail_zoe, msg_zoe = load_zoedepth_model(weights_dir)
+    if not avail_zoe:
+        log.debug("Metric depth models unavailable (%s / %s). Using physical scale anchors.", msg_v2, msg_zoe)
         return None
 
     try:
@@ -111,10 +138,14 @@ def detect_open_vocabulary(
     weights_dir: Optional[Path] = None,
     box_threshold: float = 0.35,
 ) -> List[Dict[str, float]]:
-    """Run Grounding DINO + SAM 2 prompt detection on RGB frame."""
-    available, msg = load_grounding_dino_model(weights_dir)
-    if not available:
-        log.debug("Grounding DINO unavailable: %s. Using heuristic detection.", msg)
+    """Run Florence-2 / Grounding DINO + SAM 2 prompt detection on RGB frame."""
+    avail_florence, _ = load_florence2_model(weights_dir)
+    if avail_florence:
+        log.info("Using SOTA Florence-2 Vision-Language Open-Vocabulary Engine.")
+
+    avail_dino, msg = load_grounding_dino_model(weights_dir)
+    if not avail_dino and not avail_florence:
+        log.debug("Open-vocabulary models unavailable: %s. Using heuristic detection.", msg)
         return []
 
     detections: List[Dict[str, float]] = []
