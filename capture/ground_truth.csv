@@ -1,0 +1,14 @@
+capture_id,room,quantity,identifier,value_m,tool,notes
+# quantity is one of:
+#   ceiling_height   identifier = reading number (1,2,3); record all readings taken
+#   wall_length      identifier = wall name you also use on the sketch (N,E,S,W or 1,2,3)
+#   room_diagonal    identifier = corner pair (NE_SW)
+#   opening_width    identifier = opening name (door_corridor, window_1)
+#   opening_height   identifier = same opening name
+#   opening_sill     identifier = same opening name; 0 for a door
+#   damage_width     identifier = damage name (stain_ceiling, crack_north)
+#   damage_height    identifier = same damage name
+#   adjacency        identifier = other room name; value_m = 1; notes = opening name
+# tool is one of: laser, tape
+# Delete these comment lines before running cozmo bench, or leave them: lines starting
+# with # are skipped.
