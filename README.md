@@ -126,7 +126,23 @@ The LiDAR tier works, on one capture: `163f18d3ac`, a 96.6 m walk, returns 6 roo
 that read "6 rooms, 27.20 m²" belong to `163f18d3ac` and are being corrected to say so.
 
 The photo tier recovers 2 of 4 rooms with no openings and no adjacency, so it does not stitch.
-The video tier returns 526.51 m² for 2 rooms and is broken by an order of magnitude.
+
+**The video tier does not work, and you should not choose it for the walk-in test.** Two things
+to know before you run it. It is OOM-killed on a 16 GB machine, and the wrapper still exits 0,
+so a silent failure looks like a hang. And when it does complete, its footprint is meaningless:
+`register_sequential` does not recover camera motion from the clip. Sampling the same walk at
+40 and at 120 keyframes leaves the median step between keyframes unchanged at ~1.7 m, where a
+walk sampled three times as often should give steps three times shorter. It credits the
+operator with walking 207 m inside a flat 10 m across, and with rising and falling 13.1 m in a
+single-storey property. `AUDIT.md` E1 has the table; regenerate it with
+`.venv/bin/python scripts/diagnose_video.py <clip> --keyframes 120`. **Choose the LiDAR tier**,
+where `163f18d3ac` reconstructs in 235 s.
+
+Rooms are also over-segmented at every tier. Of 24 rooms across the five LiDAR captures, **10
+have a mean width below 0.70 m** — the narrowest 0.31 m — so they are gaps between wall lines
+rather than rooms, and 4 of `163f18d3ac`'s 6 rooms are among them. A capture of a *single*
+room, `c00a170fe1`, is reported as 2. `AUDIT.md` D18 has the numbers; regenerate with
+`.venv/bin/python scripts/audit_plans.py --glob "reports/eval_*"`.
 
 No laser or tape ground truth exists for any capture, so every accuracy gate reports `SKIP`.
 `capture/ground_truth.csv` is the empty template on purpose: it was briefly filled with
