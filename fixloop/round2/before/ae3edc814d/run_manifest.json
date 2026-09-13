@@ -1,0 +1,53 @@
+{
+  "pipeline_version": "0.1.0",
+  "schema_version": "1.0",
+  "capture_id": "ae3edc814d",
+  "tier": "lidar",
+  "generated_at": "2026-09-13T04:57:32.660295+00:00",
+  "git_commit": "50d192b",
+  "runtime_seconds": 51.104,
+  "timings": {
+    "drift_s": 25.2798,
+    "fuse_s": 20.9823,
+    "gravity_s": 0.1257,
+    "walls_s": 1.1474,
+    "occupancy_s": 0.4197,
+    "floorplan_s": 0.1029,
+    "openings_s": 2.8358,
+    "damage_s": 0.0
+  },
+  "keyframes_used": 468,
+  "frames_available": 4378,
+  "points_fused": 1918578,
+  "rooms_found": 3,
+  "total_floor_area_m2": 16.567,
+  "warnings": [
+    "snapped 27 wall runs onto the building frame, mean rotation 1.69 deg",
+    "closed 0.398 m gap between room_03 and room_02 by translating room_02 onto the component anchored at room_01",
+    "damage detector: disabled, 0 frames examined, 0 regions"
+  ],
+  "input_hash": "589cf6563cfe9c1b",
+  "config": {
+    "voxel_m": 0.02,
+    "grid_resolution_m": 0.03,
+    "min_depth_confidence": 1,
+    "max_depth_range_m": 5.0,
+    "max_keyframes": 600,
+    "keyframe_translation_m": 0.08,
+    "keyframe_rotation_deg": 6.0,
+    "canonical_rotation": true,
+    "drift_correction": true,
+    "snap_walls_to_frame": true,
+    "snap_tolerance_deg": 6.0,
+    "detect_damage": false,
+    "build_scope": true,
+    "max_wall_lines": 44,
+    "min_room_area_m2": 1.5,
+    "min_inscribed_radius_m": 0.33,
+    "calibration_path": "calibration/intervals.json",
+    "weights_dir": "weights",
+    "seed": 0,
+    "labels": {}
+  },
+  "note": "produced by commit 50d192b; the before state for fix loop round 2"
+}
