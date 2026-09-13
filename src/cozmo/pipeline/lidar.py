@@ -171,6 +171,17 @@ def _quality_report(
     )
 
 
+# Whole-property floor and ceiling levels bound the height bands for wall voting (ceiling less
+# 6 cm) and occupancy (ceiling less 12 cm). They are read where the capture started, at the
+# world origin, not over the centre of the floor as room measurements are. On the long walk of
+# the benchmark flat that choice moves the property ceiling by 2.8 cm, well inside both
+# margins, and still moves the footprint from 25.27 to 24.51 m2 and re-segments the bathroom
+# and the window bay. Segmentation that sensitive to a band edge is a defect of its own, and
+# changing the reference without tape to judge the outcome would swap one unverified plan for
+# another; it is recorded in known_failure_modes.md instead.
+PROPERTY_LEVEL_REFERENCE_XZ = np.zeros(2)
+
+
 def _hash_input(input_dir: Path) -> str:
     """Deterministic hash of the capture directory for provenance: file names and sizes.
 
@@ -338,7 +349,7 @@ def build_lidar_plan(
     timings["gravity_s"] = time.perf_counter() - mark
 
     mark = time.perf_counter()
-    levels = detect_levels(cloud)
+    levels = detect_levels(cloud, reference_xz=PROPERTY_LEVEL_REFERENCE_XZ)
     warnings.extend(levels.warnings)
     walls, _ = extract_wall_segments(
         cloud, levels.floor_height, levels.ceiling_height
@@ -350,7 +361,7 @@ def build_lidar_plan(
         cloud = cloud.rotated(canonical)
         cameras = cameras @ canonical.T
         world_rotation = canonical @ world_rotation
-        levels = detect_levels(cloud)
+        levels = detect_levels(cloud, reference_xz=PROPERTY_LEVEL_REFERENCE_XZ)
         walls, candidates = extract_wall_segments(
             cloud, levels.floor_height, levels.ceiling_height
         )
@@ -429,6 +440,8 @@ def build_lidar_plan(
             room_key, np.zeros(occupancy.grid.shape, dtype=bool)
         )
         per_room = room_levels(cloud, occupancy.grid, mask, levels)
+        if per_room is not levels and per_room.height is None and levels.height is not None:
+            warnings.extend(f"{room_id}: {text}" for text in per_room.warnings)
         geometry = RoomGeometry(
             room_id=room_id,
             polygon=polygon,

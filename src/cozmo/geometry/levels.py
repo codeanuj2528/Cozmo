@@ -25,8 +25,21 @@ from cozmo.util.transforms import UP
 
 HORIZONTAL_NORMAL_TOLERANCE_RAD = np.deg2rad(20.0)
 HISTOGRAM_BIN_M = 0.01
-MIN_CEILING_CLEARANCE_M = 1.6
+# A downward-facing surface less than 2.20 m above the floor it is measured from is not a
+# ceiling, whatever else it is: a seven-foot door head sits at 2.13 m, and lofts, window heads
+# and soffits lower still. Under the previous 1.6 m bound the long walk of the benchmark flat
+# published a window bay with a 1.860 m ceiling. The cost is a real ceiling below 2.20 m,
+# which abstains rather than reporting a wrong number.
+MIN_CEILING_CLEARANCE_M = 2.20
 MAX_CEILING_CLEARANCE_M = 4.5
+# Downward-facing surfaces more than this far above the floor are overhead structure: lofts,
+# door and window heads, soffits, beams, wall-cabinet undersides. Below it are the undersides
+# of tables and counters, which say nothing about where the ceiling is.
+OVERHEAD_FROM_M = 1.0
+# The smallest patch of returns a ceiling height is read from, counted in 10 cm cells so that
+# scattered points do not add up to an area. A light fitting or a fan hub is smaller.
+MIN_CEILING_SUPPORT_M2 = 0.25
+SUPPORT_CELL_M = 0.10
 
 
 @dataclass
@@ -73,6 +86,20 @@ def _horizontal_mask(cloud: FusedCloud, facing: int) -> np.ndarray:
     return (ny * facing) > cos_tol
 
 
+def _level_at(plane: PlaneFit, reference_xz: np.ndarray) -> float:
+    """Height of a plane above one horizontal location."""
+    n = plane.normal
+    return float(-(plane.offset + n[0] * reference_xz[0] + n[2] * reference_xz[1]) / n[1])
+
+
+def _support_area(points_xz: np.ndarray, cell_m: float = SUPPORT_CELL_M) -> float:
+    """Plan area the returns actually cover, counted in occupied cells."""
+    if len(points_xz) == 0:
+        return 0.0
+    cells = np.unique(np.floor(points_xz / cell_m).astype(np.int64), axis=0)
+    return float(len(cells) * cell_m * cell_m)
+
+
 def refine_gravity(cloud: FusedCloud) -> tuple[np.ndarray, PlaneFit, list[str]]:
     """Rotation that puts the observed floor normal on +y, plus the floor plane it used."""
     warnings: list[str] = []
@@ -117,8 +144,24 @@ def refine_gravity(cloud: FusedCloud) -> tuple[np.ndarray, PlaneFit, list[str]]:
     return rotation, plane, warnings
 
 
-def detect_levels(cloud: FusedCloud, footprint_area_m2: float | None = None) -> LevelEstimate:
-    """Floor and ceiling planes of an already gravity-corrected cloud."""
+def detect_levels(
+    cloud: FusedCloud,
+    footprint_area_m2: float | None = None,
+    reference_xz: np.ndarray | None = None,
+) -> LevelEstimate:
+    """Floor and ceiling planes of an already gravity-corrected cloud.
+
+    Both levels are read above one horizontal location, by default the centre of the
+    observed floor. A plane's offset is its height where it crosses the world origin, and a
+    room is often metres from there: 1.5 degrees of fitted tilt on a floor patch 6 m out
+    moves its level by 16 cm, and a floor and a ceiling tilted differently gain or lose that
+    much height between them. On the long walk of the benchmark flat, reading room levels at
+    the origin turned a steeply tilted patch over a window ledge into a 3.04 m ceiling and
+    moved a passage ceiling by 15 cm.
+
+    `reference_xz` overrides the location. The whole-property levels in `pipeline/lidar.py`
+    pass the world origin, and say why there.
+    """
     warnings: list[str] = []
 
     up_mask = _horizontal_mask(cloud, +1)
@@ -127,55 +170,76 @@ def detect_levels(cloud: FusedCloud, footprint_area_m2: float | None = None) -> 
 
     floor_heights = cloud.points[up_mask, 1]
     hist, centres = _weighted_histogram(floor_heights, cloud.weight[up_mask], HISTOGRAM_BIN_M)
-    floor_level = min(m[0] for m in _modes(hist, centres, min_fraction=0.08))
-    near_floor = np.abs(floor_heights - floor_level) < 0.05
-    floor_plane = fit_plane(cloud.points[up_mask][near_floor], cloud.weight[up_mask][near_floor]).flip_to(UP)
-    floor_level = float(-floor_plane.offset / floor_plane.normal[1])
-
-    down_mask = _horizontal_mask(cloud, -1)
-    above = cloud.points[:, 1] > floor_level + MIN_CEILING_CLEARANCE_M
-    below = cloud.points[:, 1] < floor_level + MAX_CEILING_CLEARANCE_M
-    ceiling_mask = down_mask & above & below
+    floor_mode = min(m[0] for m in _modes(hist, centres, min_fraction=0.08))
+    near_floor = np.abs(floor_heights - floor_mode) < 0.05
+    floor_points = cloud.points[up_mask][near_floor]
+    floor_weights = cloud.weight[up_mask][near_floor]
+    floor_plane = fit_plane(floor_points, floor_weights).flip_to(UP)
+    if reference_xz is None:
+        reference_xz = np.average(floor_points[:, [0, 2]], axis=0, weights=np.maximum(floor_weights, 1e-12))
+    floor_level = _level_at(floor_plane, reference_xz)
 
     ceiling_plane: PlaneFit | None = None
     ceiling_level: float | None = None
     height: float | None = None
     sigma_height: float | None = None
     coverage = 0.0
+    unmeasured = "no ceiling surface observed"
 
-    if ceiling_mask.sum() >= 50:
-        ceil_heights = cloud.points[ceiling_mask, 1]
-        chist, ccentres = _weighted_histogram(ceil_heights, cloud.weight[ceiling_mask], HISTOGRAM_BIN_M)
-        cmodes = _modes(chist, ccentres, min_fraction=0.20)
-        # The ceiling is the highest strong mode. Lower downward-facing modes are soffits,
-        # beams, cabinet undersides and door heads, which are real but are not the ceiling.
-        ceiling_level = max(m[0] for m in cmodes)
-        near_ceiling = np.abs(ceil_heights - ceiling_level) < 0.05
-        if near_ceiling.sum() >= 20:
-            ceiling_plane = fit_plane(
-                cloud.points[ceiling_mask][near_ceiling], cloud.weight[ceiling_mask][near_ceiling]
-            ).flip_to(-UP)
-            ceiling_level = float(-ceiling_plane.offset / ceiling_plane.normal[1])
+    above_floor = cloud.points[:, 1] - floor_level
+    overhead = (
+        _horizontal_mask(cloud, -1)
+        & (above_floor > OVERHEAD_FROM_M)
+        & (above_floor < MAX_CEILING_CLEARANCE_M)
+    )
 
-            height = float(ceiling_level - floor_level)
-            # Propagate both plane offsets, plus a term for the two planes not being
-            # exactly parallel evaluated over the room's own extent.
-            span = float(np.ptp(cloud.points[ceiling_mask][near_ceiling][:, [0, 2]], axis=0).max())
-            tilt = float(np.arccos(np.clip(abs(ceiling_plane.normal @ floor_plane.normal), -1.0, 1.0)))
-            sigma_height = float(
-                np.sqrt(
-                    floor_plane.sigma_offset**2
-                    + ceiling_plane.sigma_offset**2
-                    + (0.5 * span * np.tan(tilt)) ** 2
-                )
+    if overhead.sum() >= 50:
+        chist, ccentres = _weighted_histogram(above_floor[overhead], cloud.weight[overhead], HISTOGRAM_BIN_M)
+        # The ceiling is the highest strong mode, and strength is judged against every
+        # downward-facing surface overhead. Lower strong modes are soffits, beams, lofts and
+        # door heads, which are real but are not the ceiling. Judged only against what clears
+        # the height bound, a trace of returns above a loft or a window head is the strongest
+        # thing left and would be published as the ceiling.
+        strong = [
+            m for m in _modes(chist, ccentres, min_fraction=0.20) if m[0] > MIN_CEILING_CLEARANCE_M
+        ]
+        if not strong:
+            unmeasured = (
+                f"no strong downward-facing surface more than {MIN_CEILING_CLEARANCE_M:.2f} m "
+                "above the floor"
             )
-            pts = cloud.points[ceiling_mask][near_ceiling][:, [0, 2]]
-            observed_area = float(np.prod(np.ptp(pts, axis=0))) if len(pts) > 2 else 0.0
-            if footprint_area_m2 and footprint_area_m2 > 0:
-                coverage = float(np.clip(observed_area / footprint_area_m2, 0.0, 1.0))
+        else:
+            ceiling_above_floor = max(m[0] for m in strong)
+            near_ceiling = overhead & (np.abs(above_floor - ceiling_above_floor) < 0.05)
+            support = _support_area(cloud.points[near_ceiling][:, [0, 2]])
+            if near_ceiling.sum() < 20 or support < MIN_CEILING_SUPPORT_M2:
+                unmeasured = (
+                    f"ceiling returns cover {support:.2f} m2, under the "
+                    f"{MIN_CEILING_SUPPORT_M2:.2f} m2 a height is read from"
+                )
+            else:
+                ceiling_plane = fit_plane(
+                    cloud.points[near_ceiling], cloud.weight[near_ceiling]
+                ).flip_to(-UP)
+                ceiling_level = _level_at(ceiling_plane, reference_xz)
+
+                height = float(ceiling_level - floor_level)
+                # Propagate both plane offsets, plus a term for the two planes not being
+                # exactly parallel evaluated over the room's own extent.
+                span = float(np.ptp(cloud.points[near_ceiling][:, [0, 2]], axis=0).max())
+                tilt = float(np.arccos(np.clip(abs(ceiling_plane.normal @ floor_plane.normal), -1.0, 1.0)))
+                sigma_height = float(
+                    np.sqrt(
+                        floor_plane.sigma_offset**2
+                        + ceiling_plane.sigma_offset**2
+                        + (0.5 * span * np.tan(tilt)) ** 2
+                    )
+                )
+                if footprint_area_m2 and footprint_area_m2 > 0:
+                    coverage = float(np.clip(support / footprint_area_m2, 0.0, 1.0))
 
     if ceiling_plane is None:
-        warnings.append("no ceiling surface observed; ceiling height is unmeasured at this capture")
+        warnings.append(f"{unmeasured}; ceiling height is unmeasured at this capture")
     elif coverage and coverage < 0.15:
         warnings.append(f"ceiling observed over only {coverage:.0%} of the footprint")
 
