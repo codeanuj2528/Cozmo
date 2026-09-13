@@ -348,7 +348,7 @@
   },
   {
     "gate": "wall_lengths",
-    "scope": "saurabh_room",
+    "scope": "alias_room",
     "tier": "lidar",
     "measured": "0/8 within tolerance (0%), worst 205.8 cm, 6 unpaired",
     "threshold": "<= 2 cm on >= 85%",
@@ -361,7 +361,7 @@
   },
   {
     "gate": "ceiling_height",
-    "scope": "saurabh_room",
+    "scope": "alias_room",
     "tier": "lidar",
     "measured": "worst 18.2 cm (room_01) over 1 room(s)",
     "threshold": "<= 1.5 cm every room",
@@ -373,7 +373,7 @@
   },
   {
     "gate": "opening_widths",
-    "scope": "saurabh_room",
+    "scope": "alias_room",
     "tier": "lidar",
     "measured": "no opening ground truth",
     "threshold": "<= 2 cm",
@@ -382,7 +382,7 @@
   },
   {
     "gate": "footprint",
-    "scope": "saurabh_room",
+    "scope": "alias_room",
     "tier": "lidar",
     "measured": "16.69 m2 vs 17.82 m2 (6.4%)",
     "threshold": "within +-5%",
@@ -395,7 +395,7 @@
   },
   {
     "gate": "interval_coverage",
-    "scope": "saurabh_room",
+    "scope": "alias_room",
     "tier": "lidar",
     "measured": "0/3 covered (0%), mean half-width 4.1 cm",
     "threshold": ">= 90% of 90% intervals",
@@ -408,7 +408,7 @@
   },
   {
     "gate": "room_overlap",
-    "scope": "saurabh_room",
+    "scope": "alias_room",
     "tier": "lidar",
     "measured": "largest overlap 0.000 m2 (0.0% of smallest room), total 0.000 m2",
     "threshold": "no overlap above 2% of the smallest room",
@@ -420,7 +420,7 @@
   },
   {
     "gate": "adjacency",
-    "scope": "saurabh_room",
+    "scope": "alias_room",
     "tier": "lidar",
     "measured": "no adjacency ground truth",
     "threshold": "all edges correct",
@@ -429,7 +429,7 @@
   },
   {
     "gate": "drift_accountability",
-    "scope": "saurabh_room",
+    "scope": "alias_room",
     "tier": "lidar",
     "measured": "keyframe pose graph, ICP-verified loop closures, gauge-fixed least squares; 109 closures, residual 0.3095 -> 0.2212, max correction 6.5 cm",
     "threshold": "a stated method with an ablation; poses used as-is fails",
@@ -441,7 +441,7 @@
   },
   {
     "gate": "wall_lengths",
-    "scope": "saurabh_room_photo",
+    "scope": "alias_room_photo",
     "tier": "photo",
     "measured": "no wall ground truth",
     "threshold": "<= 8%",
@@ -450,7 +450,7 @@
   },
   {
     "gate": "ceiling_height",
-    "scope": "saurabh_room_photo",
+    "scope": "alias_room_photo",
     "tier": "photo",
     "measured": "no ceiling ground truth",
     "threshold": "<= 1.5 cm",
@@ -459,7 +459,7 @@
   },
   {
     "gate": "opening_widths",
-    "scope": "saurabh_room_photo",
+    "scope": "alias_room_photo",
     "tier": "photo",
     "measured": "no opening ground truth",
     "threshold": "<= 2 cm",
@@ -468,7 +468,7 @@
   },
   {
     "gate": "footprint",
-    "scope": "saurabh_room_photo",
+    "scope": "alias_room_photo",
     "tier": "photo",
     "measured": "17.37 m2 vs 18.00 m2 (3.5%)",
     "threshold": "within +-8%",
@@ -481,7 +481,7 @@
   },
   {
     "gate": "interval_coverage",
-    "scope": "saurabh_room_photo",
+    "scope": "alias_room_photo",
     "tier": "photo",
     "measured": "no ground truth to check coverage against",
     "threshold": ">= 90%",
@@ -490,7 +490,7 @@
   },
   {
     "gate": "room_overlap",
-    "scope": "saurabh_room_photo",
+    "scope": "alias_room_photo",
     "tier": "photo",
     "measured": "single room",
     "threshold": "no overlap",
@@ -499,7 +499,7 @@
   },
   {
     "gate": "adjacency",
-    "scope": "saurabh_room_photo",
+    "scope": "alias_room_photo",
     "tier": "photo",
     "measured": "no adjacency ground truth",
     "threshold": "all edges correct",
@@ -508,7 +508,7 @@
   },
   {
     "gate": "drift_accountability",
-    "scope": "saurabh_room_photo",
+    "scope": "alias_room_photo",
     "tier": "photo",
     "measured": "not applicable at the photo tier: loop closure requires revisiting a place after going elsewhere, and per-room stills contain no trajectory to close",
     "threshold": "stated and ablated",
@@ -517,7 +517,7 @@
   },
   {
     "gate": "wall_lengths",
-    "scope": "saurabh_room_video",
+    "scope": "alias_room_video",
     "tier": "lidar",
     "measured": "no wall ground truth",
     "threshold": "<= 2 cm",
@@ -526,7 +526,7 @@
   },
   {
     "gate": "ceiling_height",
-    "scope": "saurabh_room_video",
+    "scope": "alias_room_video",
     "tier": "lidar",
     "measured": "no ceiling ground truth",
     "threshold": "<= 1.5 cm",
@@ -535,7 +535,7 @@
   },
   {
     "gate": "opening_widths",
-    "scope": "saurabh_room_video",
+    "scope": "alias_room_video",
     "tier": "lidar",
     "measured": "no opening ground truth",
     "threshold": "<= 2 cm",
@@ -544,7 +544,7 @@
   },
   {
     "gate": "footprint",
-    "scope": "saurabh_room_video",
+    "scope": "alias_room_video",
     "tier": "lidar",
     "measured": "17.36 m2 vs 9.45 m2 (83.7%)",
     "threshold": "within +-5%",
@@ -557,7 +557,7 @@
   },
   {
     "gate": "interval_coverage",
-    "scope": "saurabh_room_video",
+    "scope": "alias_room_video",
     "tier": "lidar",
     "measured": "no ground truth to check coverage against",
     "threshold": ">= 90%",
@@ -566,7 +566,7 @@
   },
   {
     "gate": "room_overlap",
-    "scope": "saurabh_room_video",
+    "scope": "alias_room_video",
     "tier": "lidar",
     "measured": "largest overlap 0.000 m2 (0.0% of smallest room), total 0.000 m2",
     "threshold": "no overlap above 2% of the smallest room",
@@ -578,7 +578,7 @@
   },
   {
     "gate": "adjacency",
-    "scope": "saurabh_room_video",
+    "scope": "alias_room_video",
     "tier": "lidar",
     "measured": "no adjacency ground truth",
     "threshold": "all edges correct",
@@ -587,7 +587,7 @@
   },
   {
     "gate": "drift_accountability",
-    "scope": "saurabh_room_video",
+    "scope": "alias_room_video",
     "tier": "lidar",
     "measured": "keyframe pose graph, ICP-verified loop closures, gauge-fixed least squares; 16 closures, residual 2.2746 -> 0.3319, max correction 57.7 cm",
     "threshold": "a stated method with an ablation; poses used as-is fails",

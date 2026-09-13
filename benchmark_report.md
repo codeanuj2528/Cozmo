@@ -148,15 +148,16 @@ Metric scale is not solved. The whole-flat walkthrough produces one room of abou
 the assignment zip's own `rgb.mp4` without its poses gives 339.61 m² for a room LiDAR puts at
 17.87 m². Do not choose this tier at a walk-in.
 
-## Same input, compared
+## The assignment's own single room
 
-| Capture | This repository | Saurabh's public submission |
-|---|---|---|
-| `c00a170fe1`, assignment `single_room.zip` | 1 room, 17.87 m², ceiling unmeasured | 1 room, 17.82 m², ceiling 2.44 m from a prior |
+`c00a170fe1` (`single_room.zip`) reconstructs as 1 room of 17.87 m² with its ceiling unmeasured,
+because the capture has no upward lap. This repository published 17.36 m² for it until `50d192b`,
+which merges a short step the cell complex leaves in the middle of a straight wall back into the
+wall. There is no tape for that room.
 
-This repository published 17.36 m² for that capture until `50d192b`, which merges a short step the
-cell complex leaves in the middle of a straight wall back into the wall. No consumer-app export
-exists, so the Part 3 head-to-head is not done.
+## Head-to-head
+
+No consumer-app export exists, so the Part 3 head-to-head is not done.
 
 ## Regenerate
 

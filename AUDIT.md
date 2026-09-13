@@ -51,7 +51,7 @@ rows, every one tagged `tool=laser`.
 Those rows cannot be laser measurements:
 
 - **The capture IDs do not exist.** The rows name `apartment_lidar`, `apartment_video`,
-  `demo_fourroom`, `demo_office`, `saurabh_room`, `saurabh_room_photo`, `saurabh_room_video`,
+  `demo_fourroom`, `demo_office`, `alias_room`, `alias_room_photo`, `alias_room_video`,
   `scan_floor_only`, `scan_with_ceiling`, `synthetic_no_ceiling`, `synthetic_room`. The real
   captures are `ae3edc814d`, `163f18d3ac`, `1a8384c3f6`, `c7d28f72c6`, `c00a170fe1` and
   `03_multiroom_photos`.
@@ -64,8 +64,8 @@ Those rows cannot be laser measurements:
   on a different device (fx ≈ 1597–1601 against 1336–1341 for ours). No laser measurement of
   someone else's flat is possible.
 - **Values repeat across supposedly different properties.** `apartment_lidar` and
-  `scan_with_ceiling` both report a footprint of 38.98 m². `saurabh_room` and `synthetic_room`
-  both report 17.82 m². `saurabh_room_video` and `synthetic_no_ceiling` both report 9.45 m².
+  `scan_with_ceiling` both report a footprint of 38.98 m². `alias_room` and `synthetic_room`
+  both report 17.82 m². `alias_room_video` and `synthetic_no_ceiling` both report 9.45 m².
   Independent measurements of different rooms do not collide to the centimetre.
 
 ### A2. The mechanism is still in the tree
@@ -79,8 +79,8 @@ eleven directories under invented benchmark names, then runs `cozmo benchmark` o
 | `apartment_video` | `163f18d3ac` — a **LiDAR** capture, filed as video |
 | `demo_fourroom` | `03_multiroom_photos` |
 | `demo_office` | `c7d28f72c6` (assignment sample) |
-| `saurabh_room` | `ae3edc814d` |
-| `saurabh_room_video` | `c00a170fe1` — a **LiDAR** capture, filed as video |
+| `alias_room` | `ae3edc814d` |
+| `alias_room_video` | `c00a170fe1` — a **LiDAR** capture, filed as video |
 | `synthetic_room` | `ae3edc814d` again |
 | `synthetic_no_ceiling` | `c00a170fe1` again |
 

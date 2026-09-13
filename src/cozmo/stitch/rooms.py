@@ -261,8 +261,8 @@ def folder_name_pairs(rooms: list[Room]) -> list[tuple[str, str]]:
     """Which rooms a folder name says should touch.
 
     A hall / passage / corridor connects to every other named room. Without a
-    connector, consecutive folders in capture order are the weaker fallback
-    the public submission uses when visual doorway matches fail.
+    connector, consecutive folders in capture order are the weaker fallback, used when no
+    doorway is matched visually.
     """
     labels = [(room.room_id, (room.label or room.room_id).strip().lower()) for room in rooms]
     connectors = [rid for rid, label in labels if label in CONNECTOR_LABELS]

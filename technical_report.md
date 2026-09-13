@@ -272,3 +272,5 @@ at 0.5×.
 `quarantine/README.md` records earlier artefacts that were removed rather than submitted: a
 benchmark over procedurally generated rooms, a head-to-head against an app that was never run,
 and a fix loop whose before and after were byte-identical.
+
+Some ideas here came from public work on the same brief: a ray-traced test room, a one-command setup script, a relative floor on photo and video intervals, and stitching rooms by folder name when no doorway is matched.

@@ -56,9 +56,11 @@ was committed. Three artifacts:
 
 `populate_benchmark_suite.py` copied the output of six real runs into eleven directories under
 invented benchmark names, then ran `cozmo benchmark` over the result. Two captures were counted
-twice (`ae3edc814d` as both `saurabh_room` and `synthetic_room`; `c00a170fe1` as both
-`saurabh_room_video` and `synthetic_no_ceiling`) and two LiDAR captures were filed as the video
-tier. The "eleven-capture benchmark suite" was six captures wearing eleven names.
+twice (`ae3edc814d` as both `alias_room` and `synthetic_room`; `c00a170fe1` as both
+`alias_room_video` and `synthetic_no_ceiling`) and two LiDAR captures were filed as the video
+tier. The "eleven-capture benchmark suite" was six captures wearing eleven names. The three run
+folders that borrowed another public benchmark's names were renamed `alias_room`,
+`alias_room_photo` and `alias_room_video` on 13 Sep 2026.
 
 `benchmark_runs/` is what that script produced.
 
