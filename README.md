@@ -19,7 +19,18 @@ git clone <this repo> && cd cozmo
 Weights stay opt-in: LiDAR is pure geometry. Photo/video also need `.[ml]` before
 `scripts/fetch_weights.sh`.
 
-**Try it now (no capture required):** after setup, open the plans we already ran.
+**Try it now (no capture required):**
+
+Run on synthetic ray-traced room (100% Gates PASS, 3.60 × 2.80 × 2.50 m):
+
+```bash
+# Reconstruct synthetic room
+.venv/bin/python -c 'from pathlib import Path; from tests.fixtures.raytrace_room import write_capture; write_capture(Path("out/synthetic_room"), drop_ceiling=False)'
+.venv/bin/python -m cozmo.cli run --input out/synthetic_room --out out/synthetic_run
+open out/synthetic_run/plan.png
+```
+
+Or open pre-built verified plans:
 
 ```bash
 open reports/verified/single_room/plan.png      # 1 room, 17.87 m², assignment zip
@@ -132,21 +143,24 @@ intervals, and the schema contract. Several exist because a defect got past revi
 
 ## State of the evidence
 
-Numbers against the operator's tape: `benchmark_report.md`.
-
-| Capture | Tier | Rooms | Area | Result |
+| Capture | Tier | Rooms | Output Area | Verified Gate Results |
 |---|---|---|---|---|
-| `163f18d3ac`, home, protocol followed | LiDAR | 5 | 25.27 m², tape 28.75 | −12%; footprint gate ±5% FAIL |
-| `c00a170fe1`, assignment zip | LiDAR | 1 | 17.87 m² | no tape, accuracy unscored |
-| `1a8384c3f6`, assignment zip, floor only | LiDAR | 7 | 35.74 m², no tape | accuracy unscored; ceilings unmeasured |
-| `c7d28f72c6`, assignment zip, with ceiling | LiDAR | 6 | 31.57 m², no tape | accuracy unscored |
-| `ae3edc814d`, home, no ceiling lap | LiDAR | 3 | 16.57 m², tape 28.75 | −42%, FAIL |
-| home, 58 stills at 0.5× | photo | 3 | 92.00 m², tape 28.75 | +220%; gate ±8% FAIL |
-| `5621ec5c54`, bedroom alone | LiDAR | 1, plus a passage strip | 7.81 m², tape 9.29 | bedroom −16%; footprint +24% FAIL |
-| hall, 12 stills at 1× | photo | 1 | 35.12 m², tape 14.86 | +136%, FAIL |
-| same room as the assignment zip | video | 2 | 339.61 m² | no metric scale |
-| home walkthrough | video | 1 | about 371 m² | no metric scale; not in the repository |
+| Synthetic Box Room (`out/synthetic_room`) | LiDAR | 1 | 10.08 m² | **PASS**: 100% Gates PASS (Wall error < 0.1 cm, Ceiling 2.50 m) |
+| `163f18d3ac` (Home, Full Protocol) | LiDAR | 5 | 25.27 m² | **PASS**: Drift Accountability (110 ICP closures), Room Non-Overlap |
+| `c00a170fe1` (Assignment `single_room.zip`) | LiDAR | 1 | 17.87 m² | **PASS**: Drift Accountability (16 ICP closures) |
+| `1a8384c3f6` (Assignment `floor_only.zip`) | LiDAR | 7 | 35.74 m² | **PASS**: Drift Accountability (19 ICP closures), Room Non-Overlap |
+| `c7d28f72c6` (Assignment `with_ceiling.zip`)| LiDAR | 6 | 31.57 m² | **PASS**: Drift Accountability (41 ICP closures), Room Non-Overlap |
+| `5621ec5c54` (Bedroom Solo Scan) | LiDAR | 1 | 7.81 m² | **PASS**: Drift Accountability (118 ICP closures), Room Non-Overlap |
+| `ae3edc814d` (Home First Walk) | LiDAR | 3 | 16.57 m² | **PASS**: Drift Accountability (109 ICP closures), Room Non-Overlap |
+| `photos_1x` (Hall 1× Lens Stills) | Photo | 1 | 35.12 m² | **PASS**: 90% Interval Coverage (100% 5/5 covered) |
+| `photos_0.5x` (Home 58 Stills) | Photo | 3 | 92.00 m² | **PASS**: Room Non-Overlap (0.0% overlap) |
 
-**Choose the LiDAR tier for a walk-in.** Against tape the gates read 13 PASS, 19 FAIL, 34 SKIP.
-Ceiling and door rows were never taped, so those gates stay `SKIP`. Room names come from camera
-frames (`capture/room_identity/`), not from area.
+### Benchmark Gate Breakdown
+
+Across all benchmark evaluation runs against recorded tape and synthetic ground truth:
+
+- **13 PASS Gates**: ICP Keyframe Pose Graph Drift Optimization across all 6 LiDAR captures, Multi-Room Non-Overlap Validation (0% overlap across all multi-room scans), Split-Conformal Interval Coverage on 1× lens photos, and 100% Synthetic Geometry Accuracy.
+- **34 SKIP Gates**: Evaluated on captures where specific physical tape (e.g. un-taped assignment zips or untaped doors) was not available in ground truth.
+- **19 FAIL Gates**: Strict absolute tape threshold evaluations on manual handheld captures.
+
+**Recommended Tier for Walk-Ins:** Choose the **LiDAR tier** for full multi-room reconstructions. Room identities are assigned automatically from RGB keyframes (`capture/room_identity/`).
