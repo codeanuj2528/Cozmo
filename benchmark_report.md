@@ -38,12 +38,15 @@ Long walk `163f18d3ac`, which followed the protocol: ceiling lap done, loop clos
 
 | Room | Tape | LiDAR | Error | LiDAR, feet | Tape, feet |
 |---|---|---|---|---|---|
-| Hall | 14.86 m² | 13.18 m² | −11% | 15.8 × 9.6 | 16 × 10, matched to the tape's precision |
+| Hall | 14.86 m² | 13.18 m² | −11% | sides 9.6, 13.5, 9.8, 15.1 | 16 × 10; one LiDAR wall meets its neighbours at 78° |
 | Bedroom | 9.29 m² | 5.28 m² | −43% | 8.5 × 6.8 | 10 × 10 |
 | Bathroom | 2.04 m² | 2.63 m² | +29% | — | area only; this room also holds the upper passage |
 | Passage | 2.55 m² | 1.99 m² | −22% | 8.4 × 2.6 | 11 × 2.5, width matched, length short |
-| Window bay | not taped | 2.19 m² | — | 7.9 × 3.9 | — |
+| Window bay | not taped | 2.19 m² | — | 8.1 × 3.8 | — |
 | **Footprint** | **28.75 m²** | **25.27 m²** | **−12%, FAIL** | | the taped rooms alone sum to 23.08 m², −20% |
+
+LiDAR feet are each room's extent along its longest wall, except the hall: the plan draws it out of
+square, so it is given side by side, and one long side is 2.5 ft short of the tape.
 
 Adjacency 3/4. Found: passage–bedroom, hall–bathroom, passage–bathroom. Missed: hall–passage,
 because the upper passage is merged into the bathroom. One edge beyond the tape, hall to the
@@ -85,7 +88,7 @@ The two walks are the same flat at the same tier.
 | Room | Long walk | First walk | Walls apart | Ceiling apart |
 |---|---|---|---|---|
 | Bedroom | 2.58 × 2.08 m | 2.89 × 2.68 m | 0.31 / 0.61 m | 0.4 cm |
-| Hall | 4.82 × 2.93 m | 2.88 × 2.59 m | 1.95 / 0.34 m | 0.8 cm |
+| Hall | 4.72 × 3.88 m, out of square | 2.88 × 2.59 m | 1.84 / 1.29 m | 0.8 cm |
 | Passage | 2.55 × 0.80 m | 2.73 × 2.30 m | segmented differently | 27.5 cm |
 
 Gate: 0/25 walls agree, ceiling spread 27.5 cm, FAIL. The brief asks which failure this is.
@@ -98,10 +101,10 @@ walks, so the long walk's short bedroom is a reconstruction defect and not a tap
 
 ## Interval coverage
 
-LiDAR intervals cover the tape on 0 of 16 measurements on the long walk (mean half-width 11.9 cm)
-and 0 of 15 on the first walk (9.6 cm). The intervals carry sensor noise, residual drift and plane
+LiDAR intervals cover the tape on 0 of 16 measurements on the long walk (mean half-width 11.9 cm),
+0 of 15 on the first walk (9.6 cm) and 0 of 5 on the bedroom scan (12.4 cm). The intervals carry sensor noise, residual drift and plane
 roughness. They do not carry segmentation error, and segmentation error — a merged room, a short
-bedroom — runs to tens of centimetres. No quantiles were fitted to close the gap: with two walks
+bedroom — runs to tens of centimetres. No quantiles were fitted to close the gap: with three walks
 of one flat, the rows used to fit would be the rows scored. The photo tier covers 7 of 11 at a
 mean half-width of 6.9 m, which is coverage by being uninformative.
 
@@ -134,7 +137,7 @@ registers 7.
 | | Tape | 0.5× set | 1× set |
 |---|---|---|---|
 | Area | 14.86 m² (160 sq ft) | rejected at 71.8 m² | 35.12 m² (378 sq ft), +136% |
-| Size | 16 × 10 ft | — | 24.4 × 22.3 ft |
+| Size | 16 × 10 ft | — | 32.1 × 19.5 ft extent, two corners at 61° |
 | Ceiling | not taped (LiDAR 2.60 m) | — | 2.74 m |
 
 The 1× lens roughly halves the area the hall reconstructs to and brings it inside the plausibility

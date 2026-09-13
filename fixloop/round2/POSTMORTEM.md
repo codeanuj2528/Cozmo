@@ -79,3 +79,11 @@ together with the rescored benchmark.
 
 Root cause: wrong. Fix: shipped. Gate movement: none. Prediction: badly wrong. That is
 post-mortem marks at most, and the round-1 photo-tier loop remains the one with movement on it.
+
+## Correction, 13 Sep 2026
+
+The hall sentence under "The tape is recorded to the foot" picked the longest side and one short
+side. The plan draws the long-walk hall with sides of 9.6, 13.5, 9.8 and 15.1 ft plus a 0.7 ft jog,
+one wall meeting its neighbours at 78°, and the `before/` and `after/` plans hold that same polygon.
+It is 13.18 m² against the taped 14.86 m² (−11%), with one long side 2.5 ft short. Tape precision is
+also not reported beside the gates: the benchmark scores each gate as written and nothing more.

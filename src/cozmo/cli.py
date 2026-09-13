@@ -207,7 +207,7 @@ def benchmark(
         ..., "--runs", "-r", help="Directory of run outputs, one subdirectory per capture."
     ),
     ground_truth: Path = typer.Option(
-        ..., "--ground-truth", "-g", help="Laser ground truth CSV."
+        ..., "--ground-truth", "-g", help="Ground truth CSV, tape or laser."
     ),
     out_dir: Path = typer.Option(
         Path("reports/benchmark"), "--out", "-o", help="Where to write the gate table."
@@ -222,7 +222,7 @@ def benchmark(
         "Give the option again to score another pair.",
     ),
 ) -> None:
-    """Score every run against laser ground truth and print the gate table.
+    """Score every run against measured ground truth and print the gate table.
 
     A gate with no ground truth behind it is reported as not evaluated. It is never
     reported as passed, because a table of green rows that were never checked is worse
@@ -279,7 +279,7 @@ def calibrate(
         ..., "--runs", "-r", help="Directory of run outputs, one subdirectory per capture."
     ),
     ground_truth: Path = typer.Option(
-        ..., "--ground-truth", "-g", help="Laser ground truth CSV."
+        ..., "--ground-truth", "-g", help="Ground truth CSV, tape or laser."
     ),
     out_dir: Path = typer.Option(
         Path("calibration"), "--out", "-o", help="Where to write intervals.json."

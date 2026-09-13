@@ -94,6 +94,10 @@ Every plan reports its loop closures, pose residuals and largest correction. On 
 On this capture correction makes the plan better, not worse: with snapping on, the walk without
 it loses a room and a third of its footprint. The last row is the published plan.
 
+Snapping moves only walls within 6° of the building frame and leaves the rest where they were
+measured. The long walk's hall keeps one wall meeting its neighbours at 78°, the bedroom walked
+alone one at 79°, and the 1× photo hall two corners at 61°, so those rooms are drawn out of square.
+
 ## 6. A room the operator did not walk into is not reported
 
 Room segmentation requires camera track inside a face to label it interior. This is

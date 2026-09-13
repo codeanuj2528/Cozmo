@@ -122,7 +122,9 @@ footprint, and correction recovers both. Snapping does not improve area on this 
 0.5 m² against the tape with correction, and 3.6 m² and a room without it. It stays on as the
 plane-anchored half of the correction: the 18 wall runs it rotates sat 1.80° off the building
 frame on average, which is yaw error if the flat's walls are square, and 0.5 m² is small next to
-the 8.7 m² between the two walks of this flat.
+the 8.7 m² between the two walks of this flat. Walls
+further off than 6° are left as measured, so the long walk's hall is drawn with one wall meeting its
+neighbours at 78°.
 
 ---
 

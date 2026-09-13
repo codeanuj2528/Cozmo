@@ -1,4 +1,4 @@
-"""Reading laser ground truth, and pairing it with what the pipeline reported.
+"""Reading tape or laser ground truth, and pairing it with what the pipeline reported.
 
 Pairing is the part that decides whether a benchmark measures anything. If a reported wall
 is allowed to be compared against whichever ground-truth wall it happens to be closest to,

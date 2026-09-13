@@ -65,8 +65,8 @@ Subfolder names become the room labels on the plan.
 ## The other commands
 
 ```bash
-# Score every run against laser ground truth. Gates with no truth behind them report SKIP,
-# never PASS.
+# Score every run against measured ground truth, tape or laser. Gates with no truth behind
+# them report SKIP, never PASS.
 .venv/bin/python -m cozmo.cli benchmark --runs runs --ground-truth capture/ground_truth.csv \
     --room-map capture/room_map.json --out reports/benchmark
 
@@ -78,10 +78,11 @@ Subfolder names become the room labels on the plan.
 .venv/bin/python -m cozmo.cli run --input <dir> --out runs/no_drift --no-drift-correction
 ```
 
-## What to show an examiner
+## Reading order
 
-`SUBMIT.md` — which plans are real, which failures to disclose, what not to invent.
-`benchmark_report.md` — one-page PASS / FAIL / SKIP headline.
+- `technical_report.pdf`: design decisions, the error budget and the state of the evidence, five pages.
+- `benchmark_report.md`: every gate against the tape, room by room.
+- `compliance_matrix.md`: each requirement, where it lives, and its status.
 
 ## Where to look
 
@@ -126,26 +127,25 @@ you are looking for a tier-specific bug, it is almost certainly in the front hal
 .venv/bin/python -m pytest tests/ -q
 ```
 
-68 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
+62 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
 intervals, and the schema contract. Several exist because a defect got past review.
 
 ## State of the evidence
 
-Numbers against the operator's tape: `benchmark_report.md`. What to show and what to disclose:
-`SUBMIT.md`.
+Numbers against the operator's tape: `benchmark_report.md`.
 
-| Capture | Tier | Rooms | Area | Show? |
+| Capture | Tier | Rooms | Area | Result |
 |---|---|---|---|---|
-| `163f18d3ac`, home, protocol followed | LiDAR | 5 | 25.27 m², tape 28.75 | yes, lead with it |
-| `c00a170fe1`, assignment zip | LiDAR | 1 | 17.87 m² | yes |
-| `1a8384c3f6`, assignment zip, floor only | LiDAR | 7 | 35.74 m², no tape | yes, ceilings unmeasured |
-| `c7d28f72c6`, assignment zip, with ceiling | LiDAR | 6 | 31.57 m², no tape | yes |
-| `ae3edc814d`, home, no ceiling lap | LiDAR | 3 | 16.57 m², tape 28.75 | beside the long walk |
-| home, 58 stills at 0.5× | photo | 3 | 92.00 m² | disclose the fail |
-| `5621ec5c54`, bedroom alone | LiDAR | 1, plus a passage strip | 7.81 m², tape 9.29 | disclose |
-| hall, 12 stills at 1× | photo | 1 | 35.12 m², tape 14.86 | disclose the fail |
-| same room as the assignment zip | video | 2 | 339.61 m² | disclose the fail |
-| home walkthrough | video | 1 | about 371 m² | disclose; do not lead |
+| `163f18d3ac`, home, protocol followed | LiDAR | 5 | 25.27 m², tape 28.75 | −12%; footprint gate ±5% FAIL |
+| `c00a170fe1`, assignment zip | LiDAR | 1 | 17.87 m² | no tape, accuracy unscored |
+| `1a8384c3f6`, assignment zip, floor only | LiDAR | 7 | 35.74 m², no tape | accuracy unscored; ceilings unmeasured |
+| `c7d28f72c6`, assignment zip, with ceiling | LiDAR | 6 | 31.57 m², no tape | accuracy unscored |
+| `ae3edc814d`, home, no ceiling lap | LiDAR | 3 | 16.57 m², tape 28.75 | −42%, FAIL |
+| home, 58 stills at 0.5× | photo | 3 | 92.00 m², tape 28.75 | +220%; gate ±8% FAIL |
+| `5621ec5c54`, bedroom alone | LiDAR | 1, plus a passage strip | 7.81 m², tape 9.29 | bedroom −16%; footprint +24% FAIL |
+| hall, 12 stills at 1× | photo | 1 | 35.12 m², tape 14.86 | +136%, FAIL |
+| same room as the assignment zip | video | 2 | 339.61 m² | no metric scale |
+| home walkthrough | video | 1 | about 371 m² | no metric scale; not in the repository |
 
 **Choose the LiDAR tier for a walk-in.** Against tape the gates read 13 PASS, 19 FAIL, 34 SKIP.
 Ceiling and door rows were never taped, so those gates stay `SKIP`. Room names come from camera

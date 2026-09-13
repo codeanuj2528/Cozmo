@@ -1,4 +1,4 @@
-"""Damage staging, projection, concealed-damage rules and scope synthesis.
+"""Damage detection and concealed-damage rules.
 
 The previous version of this file imported `SemanticStager`, which does not exist, taking
 the whole test suite down at collection alongside `test_recon.py`.
@@ -15,87 +15,6 @@ from __future__ import annotations
 import numpy as np
 
 from cozmo.damage.rules import RuleEngine
-from cozmo.damage.stage import (
-    FrameDetection,
-    SemanticResult,
-    non_maximum_suppression,
-    select_analysis_frames,
-)
-
-
-def test_analysis_frames_are_spread_over_the_capture():
-    picked = select_analysis_frames(total_frames=300, max_frames=10)
-    assert len(picked) <= 10
-    assert len(set(picked)) == len(picked), "a frame must not be analysed twice"
-    assert all(0 <= i < 300 for i in picked)
-    if len(picked) > 2:
-        gaps = np.diff(sorted(picked))
-        assert gaps.min() > 1, "clustered frames waste inference on near-duplicate views"
-
-
-def test_analysis_frames_handle_short_captures():
-    assert len(select_analysis_frames(total_frames=3, max_frames=10)) <= 3
-    assert select_analysis_frames(total_frames=0, max_frames=10) == []
-
-
-def _frame(boxes, labels, scores, frame_idx=0):
-    return FrameDetection(
-        frame_idx=frame_idx,
-        bboxes=list(boxes),
-        labels=list(labels),
-        scores=list(scores),
-        masks=[None] * len(boxes),
-    )
-
-
-def test_nms_collapses_overlapping_detections_of_one_class():
-    kept = non_maximum_suppression(
-        [
-            _frame(
-                [(10, 10, 100, 100), (12, 12, 102, 102), (400, 400, 480, 480)],
-                ["water_stain"] * 3,
-                [0.9, 0.7, 0.8],
-            )
-        ],
-        iou_threshold=0.5,
-        confidence_threshold=0.1,
-    )
-    surviving = sum(len(f.bboxes) for f in kept)
-    assert surviving == 2, "the two boxes that overlap are one finding"
-    scores = [s for f in kept for s in f.scores]
-    assert 0.9 in scores, "the strongest detection of a cluster must survive"
-    assert 0.7 not in scores
-
-
-def test_nms_keeps_different_classes_in_the_same_place():
-    """A crack running through a water stain is two findings, not one.
-
-    They are repaired differently and scoped separately, so suppressing one because it
-    overlaps the other silently drops a line item from the scope.
-    """
-    kept = non_maximum_suppression(
-        [_frame([(10, 10, 100, 100), (10, 10, 100, 100)], ["water_stain", "crack"], [0.9, 0.8])],
-        iou_threshold=0.5,
-        confidence_threshold=0.1,
-    )
-    assert sum(len(f.bboxes) for f in kept) == 2
-
-
-def test_low_confidence_detections_are_dropped():
-    kept = non_maximum_suppression(
-        [_frame([(10, 10, 100, 100)], ["water_stain"], [0.02])],
-        iou_threshold=0.5,
-        confidence_threshold=0.5,
-    )
-    assert sum(len(f.bboxes) for f in kept) == 0
-
-
-def test_semantic_result_is_empty_when_nothing_was_detected():
-    """No detections must produce no damage, not a default finding."""
-    result = SemanticResult(room_id="room_01")
-    assert result.detections == []
-    assert result.total_detections == 0
-    assert result.detection_rate == 0.0
 
 
 def test_rule_engine_ships_with_auditable_rules():

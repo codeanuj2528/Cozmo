@@ -21,7 +21,7 @@ Requirement → where it lives → what it produces → status.
 | 1.6 | LiDAR tier: depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | Home long walk: 5 rooms, 25.27 m², 7 openings, 3/4 taped connections; the assignment's two flat scans give 7 and 6 rooms | **MET** |
 | 1.7 | Device matrix | `capture/DEVICE_MATRIX.md` | Tier availability per device; accuracy filled from tape for LiDAR and photo, none for video, ceilings or openings | **PARTIAL** |
 | 1.8 | Same output contract from each tier | `cozmo/schema.py`, `cozmo/pipeline/__init__.py` | One `PropertyPlan`, one `reconstruct`, three builders | **MET** |
-| 1.9 | Intervals widen honestly as data thins | `cozmo/uncertainty/calibration.py` | Photo walls at ±3.0 m on average, but LiDAR intervals cover the tape on 0 of 31 measurements (2.24) | **PARTIAL** |
+| 1.9 | Intervals widen honestly as data thins | `cozmo/uncertainty/calibration.py` | Photo walls at ±3.0 m on average, but LiDAR intervals cover the tape on 0 of 36 measurements (2.24) | **PARTIAL** |
 
 ## Part 2 — Output contract and gates
 
@@ -30,7 +30,7 @@ Requirement → where it lives → what it produces → status.
 | 2.1 | Dimensioned per-room plan with walls | `cozmo/geometry/assemble.py` | `Room.walls[]` with start, end, length, plane, support | **MET** |
 | 2.2 | Ceiling height per room | `cozmo/geometry/levels.py` | 2.56–2.68 m per room on the long walk, read over each room's own floor. A ceiling must be over 2.20 m, strong against everything overhead and cover 0.25 m², or the room reports it unmeasured, as the window bay does | **MET** |
 | 2.3 | Floor area and openings | `cozmo/geometry/{cellcomplex,openings}.py` | `Room.floor_area`, `Room.openings[]` | **MET** |
-| 2.4 | Stitched multi-room plan, correct adjacency | `cozmo/geometry/assemble.py`, `cozmo/stitch/rooms.py` | Against 4 taped edges: long walk 3/4 with one untaped extra, first walk 2/4, photo 1/4 | **PARTIAL** |
+| 2.4 | Stitched multi-room plan, correct adjacency | `cozmo/geometry/assemble.py`, `cozmo/stitch/rooms.py` | Against 4 taped edges: long walk 3/4 with one untaped extra, first walk 2/4, photo 2/4 | **PARTIAL** |
 | 2.5 | Per-surface damage regions, class and metric extent | `cozmo/damage/detect.py` | `DamageRegion` with surface, class and extent in metres; one 0.08 m² false positive on the damage-free first walk, none on the long walk | **MET** |
 | 2.6 | Concealed-damage flags with the rule that fired | `cozmo/damage/rules.py` | `ConcealedFlag.rule_text` | **MET** |
 | 2.7 | Scope line items keyed to surfaces | `cozmo/scope/generate.py` | `ScopeItem.surface_id`, `driver_damage_ids` | **MET** |
@@ -43,14 +43,14 @@ Requirement → where it lives → what it produces → status.
 | 2.14 | Benchmark: the same rooms at all three tiers | `DROP_CAPTURES_HERE/0{1,2,3}_*` | LiDAR, video and per-room photo folders of the one flat | **MET** as captures; photo and video fail their gates |
 | 2.15 | Benchmark: one room captured twice at the same tier | `ae3edc814d`, `163f18d3ac`, `5621ec5c54` | Two LiDAR walks of the flat and one of the bedroom alone | **MET** as captures; both repeatability pairs fail (2.21) |
 | 2.16 | Laser or tape ground truth on everything | `capture/ground_truth.csv` | Tape walls, areas and adjacency; no ceilings, doors or bathroom walls | **PARTIAL** |
-| 2.17 | Raw sensor data submitted | `DROP_CAPTURES_HERE/`, `data/raw/` | Two Stray exports, 58 stills, one walkthrough | **PARTIAL**: the 18,649-frame export is outside git |
+| 2.17 | Raw sensor data submitted | `DROP_CAPTURES_HERE/`, `data/raw/` | Three Stray exports of the flat, 58 stills at 0.5× and 12 at 1×, one walkthrough | **PARTIAL**: about 6 GB, kept outside git and the zip |
 | 2.18 | Gate: opening widths ≤2 cm on ≥85%, detection scored | `cozmo/bench/gates.py` `gate_opening_widths` | Misses and phantoms both counted | **UNVERIFIED**: no door tape |
 | 2.19 | Gate: ceiling height ≤1.5 cm per room | `cozmo/bench/gates.py` `gate_ceiling_height` | Implemented | **UNVERIFIED**: no ceiling tape |
 | 2.20 | Gate: repeat ceiling spread ≤1 cm, and say which failure | `cozmo/bench/gates.py` `gate_repeatability`, `benchmark_report.md` | Walks: bedroom 0.4 cm, hall 0.8 cm, passage 27.5 cm. Bedroom alone against the long walk: 2.9 cm | **FAIL** |
 | 2.21 | Gate: repeatability 1 cm or 0.5% per wall | `cozmo/bench/gates.py` `gate_repeatability` | Walks: 0/25 walls agree. Bedroom alone against the long walk: 0/5, worst 120.7 cm | **FAIL** |
 | 2.22 | Gate: drift accountability with an on/off ablation | `cozmo/geometry/drift.py`, `known_failure_modes.md` §5 | Pose graph with ICP-verified closures; four-way ablation | **MET** |
 | 2.23 | Gate: photo-tier whole-property stitch, ±8% | `cozmo/stitch/rooms.py` | 3 rooms, 92.00 m² against 28.75 m² (+220%), adjacency 2/4 from folder names | **FAIL** |
-| 2.24 | Calibration scored at every tier | `cozmo/uncertainty/calibration.py`, `gate_interval_coverage` | LiDAR covers 0/16 and 0/15; photo 7/11; not fitted in-sample | **FAIL** |
+| 2.24 | Calibration scored at every tier | `cozmo/uncertainty/calibration.py`, `gate_interval_coverage` | LiDAR covers 0/16, 0/15 and 0/5; photo 7/11, and 5/5 on the 1× hall only because its intervals are about 7 m wide; not fitted in-sample | **FAIL** |
 
 ## Part 3 — Head-to-head
 
@@ -58,7 +58,7 @@ Requirement → where it lives → what it produces → status.
 |---|---|---|---|---|
 | 3.1 | Compare against one consumer app on 2 rooms | — | — | **NOT MET**: no export captured |
 | 3.2 | Name the app and version, submit its export | `DROP_CAPTURES_HERE/08_competitor_export` | Empty | **NOT MET** |
-| 3.3 | Beat or tie on ≥70% of shared dimensions | `cozmo/bench/headtohead.py` | Harness present, no data | **NOT MET** |
+| 3.3 | Beat or tie on ≥70% of shared dimensions | — | No export to compare, and no scorer: the earlier one fixed the result in our favour and was removed | **NOT MET** |
 
 ## Part 4 — Fix loop
 
@@ -95,7 +95,7 @@ Requirement → where it lives → what it produces → status.
 | D4 | Reproduction bundle | `run_manifest.json` per run: commit, input hash, config, timings | **MET** |
 | D5 | Benchmark report across three tiers | `benchmark_report.md`, `reports/verified/gates/` | **PARTIAL**: 13 PASS, 19 FAIL, 34 SKIP |
 | D6 | Fix loop bundle | `fixloop/`, index `fixloop/README.md` | **MET** |
-| D7 | Technical report, at most 6 pages | `technical_report.md` | **MET** |
+| D7 | Technical report, at most 6 pages | `technical_report.md`, rendered as `technical_report.pdf`, 5 pages | **MET** |
 | D8 | Raw benchmark data: sensor logs, ground truth, app exports | `DROP_CAPTURES_HERE/`, `capture/` | **PARTIAL**: no app export, partial tape |
 | D9 | Weights fetched by script | `scripts/fetch_weights.sh` | **MET** |
 | D10 | Runs without calling our infrastructure | no network at run time | **MET** |
@@ -111,7 +111,7 @@ Requirement → where it lives → what it produces → status.
 | UNVERIFIED | 2 |
 | NOT MET | 5 |
 
-Of the five `NOT MET`, four are missing captures rather than missing code: the staged-damage room
-and the three head-to-head rows. The fifth is the video tier, which runs but does not produce a
-metric plan. The five `FAIL` are measured shortfalls, each explained in `benchmark_report.md` or a
+Of the five `NOT MET`, four need captures that were never made: the staged-damage room and the
+three head-to-head rows, which also have no scorer since one that always won was removed. The fifth
+is the video tier, which runs but does not produce a metric plan. The five `FAIL` are measured shortfalls, each explained in `benchmark_report.md` or a
 post-mortem.
