@@ -81,7 +81,7 @@ def gate_wall_lengths(plan: PropertyPlan, truth: GroundTruth, capture_id: str) -
     errors: list[tuple[float, float]] = []
     unpaired = 0
     for room in plan.rooms:
-        name = resolve_room(room, truth)
+        name = resolve_room(room, truth, capture_id)
         if name is None:
             continue
         truth_walls = [r.value_m for r in truth.values(capture_id, name, "wall_length")]
@@ -117,7 +117,7 @@ def gate_wall_lengths(plan: PropertyPlan, truth: GroundTruth, capture_id: str) -
 def gate_ceiling_height(plan: PropertyPlan, truth: GroundTruth, capture_id: str) -> GateResult:
     errors: list[tuple[str, float]] = []
     for room in plan.rooms:
-        name = resolve_room(room, truth)
+        name = resolve_room(room, truth, capture_id)
         if name is None:
             continue
         actual = truth.scalar(capture_id, name, "ceiling_height")
@@ -156,7 +156,7 @@ def gate_opening_widths(plan: PropertyPlan, truth: GroundTruth, capture_id: str)
     worst = 0.0
 
     for room in plan.rooms:
-        name = resolve_room(room, truth)
+        name = resolve_room(room, truth, capture_id)
         if name is None:
             continue
         actual = sorted(r.value_m for r in truth.values(capture_id, name, "opening_width"))
@@ -231,7 +231,7 @@ def gate_interval_coverage(plan: PropertyPlan, truth: GroundTruth, capture_id: s
     half_widths: list[float] = []
 
     for room in plan.rooms:
-        name = resolve_room(room, truth)
+        name = resolve_room(room, truth, capture_id)
         if name is None:
             continue
         checks = [
@@ -357,7 +357,7 @@ def gate_adjacency(plan: PropertyPlan, truth: GroundTruth, capture_id: str) -> G
         return GateResult("adjacency", capture_id, plan.tier.value,
                           "no adjacency ground truth", "all edges correct", Status.SKIP)
 
-    names = {room.room_id: (resolve_room(room, truth) or room.room_id) for room in plan.rooms}
+    names = {room.room_id: (resolve_room(room, truth, capture_id) or room.room_id) for room in plan.rooms}
     reported = {
         frozenset({names.get(link.room_a, link.room_a), names.get(link.room_b, link.room_b)})
         for link in plan.adjacency
@@ -403,8 +403,13 @@ def gate_repeatability(
                           Status.SKIP)
 
     a, b = plans[0], plans[1]
-    rooms_a = {resolve_room(r, truth) or r.room_id: r for r in a.rooms}
-    rooms_b = {resolve_room(r, truth) or r.room_id: r for r in b.rooms}
+    # Two captures, two maps: room_02 in one walk need not be room_02 in the other.
+    from cozmo.bench.groundtruth import resolve_capture_id
+
+    capture_a = resolve_capture_id(a, capture_ids[0], truth)
+    capture_b = resolve_capture_id(b, capture_ids[1] if len(capture_ids) > 1 else capture_ids[0], truth)
+    rooms_a = {resolve_room(r, truth, capture_a) or r.room_id: r for r in a.rooms}
+    rooms_b = {resolve_room(r, truth, capture_b) or r.room_id: r for r in b.rooms}
     shared = set(rooms_a) & set(rooms_b)
     if not shared:
         return GateResult("repeatability", scope, a.tier.value,

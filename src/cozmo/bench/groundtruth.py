@@ -46,11 +46,30 @@ class TruthRecord:
 @dataclass
 class GroundTruth:
     records: list[TruthRecord] = field(default_factory=list)
-    room_map: dict[str, str] = field(default_factory=dict)
+    room_map: dict = field(default_factory=dict)
 
     @property
     def captures(self) -> set[str]:
         return {r.capture_id for r in self.records}
+
+    def room_name(self, capture_id: str | None, room_id: str) -> str | None:
+        """The taped room a reconstructed room id stands for, in one capture.
+
+        Room ids are assigned per reconstruction, ordered by area, so `room_03` in one capture
+        and `room_03` in another are unrelated rooms. A single flat map applied to both is
+        therefore wrong for at least one of them, and on the benchmark flat it was wrong for
+        both: the home walk's bedroom was being scored as the hall, and the long walk's
+        bathroom as the passage. The map is keyed by capture. A flat map is still read, for a
+        run with a single capture, and it is never applied across captures.
+        """
+        nested = self.room_map.get(capture_id) if capture_id is not None else None
+        if isinstance(nested, dict):
+            value = nested.get(room_id)
+            return value if isinstance(value, str) else None
+        if any(isinstance(v, dict) for v in self.room_map.values()):
+            return None
+        value = self.room_map.get(room_id)
+        return value if isinstance(value, str) else None
 
     def for_capture(self, capture_id: str) -> list[TruthRecord]:
         return [r for r in self.records if r.capture_id == capture_id]
@@ -114,7 +133,9 @@ def load_ground_truth(path: Path | str, room_map_path: Path | str | None = None)
     if room_map_path:
         candidate = Path(room_map_path)
         if candidate.exists():
-            room_map = json.loads(candidate.read_text())
+            room_map = {
+                k: v for k, v in json.loads(candidate.read_text()).items() if not k.startswith("_")
+            }
     return GroundTruth(records=records, room_map=room_map)
 
 
@@ -136,7 +157,7 @@ def resolve_capture_id(plan, directory_name: str, truth: GroundTruth) -> str:
     return directory_name
 
 
-def resolve_room(plan_room: Room, truth: GroundTruth) -> str | None:
+def resolve_room(plan_room: Room, truth: GroundTruth, capture_id: str | None = None) -> str | None:
     """The ground-truth room this reconstructed room corresponds to.
 
     From the operator's mapping, or from the room's own label when the reconstruction was
@@ -147,7 +168,7 @@ def resolve_room(plan_room: Room, truth: GroundTruth) -> str | None:
     # first would rename a photo-tier bathroom to hall just because both are room_01.
     if plan_room.label and plan_room.label != "room":
         return plan_room.label
-    mapped = truth.room_map.get(plan_room.room_id)
+    mapped = truth.room_name(capture_id, plan_room.room_id)
     if mapped:
         return mapped
     return None
@@ -209,7 +230,7 @@ def collect_residuals(
             out.setdefault((tier, quantity), []).append((float(predicted), float(actual)))
 
     for room in plan.rooms:
-        name = resolve_room(room, truth)
+        name = resolve_room(room, truth, capture_id)
         if name is None:
             continue
 

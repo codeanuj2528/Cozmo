@@ -1,6 +1,28 @@
 {
-  "room_01": "hall",
-  "room_02": "bedroom",
-  "room_03": "passage",
-  "room_05": "bathroom"
+  "_method": "Each reconstructed room is named from RGB frames taken by the camera standing deepest inside it, the view least likely to be looking out through a doorway. Never from area: area is one of the scored quantities, so naming rooms by area is circular. Frames are in capture/room_identity/<capture>.jpg. Keys starting with an underscore are ignored by the loader.",
+  "163f18d3ac": {
+    "room_01": "hall",
+    "room_02": "bedroom",
+    "room_03": "bathroom",
+    "room_05": "passage"
+  },
+  "ae3edc814d": {
+    "room_01": "bedroom",
+    "room_02": "hall",
+    "room_03": "passage"
+  },
+  "_evidence": {
+    "163f18d3ac": {
+      "room_01": "frames 17905 2800 870: sofa, curtained window, tray ceiling with downlights",
+      "room_02": "frames 9516 14082 11696: split AC, ceiling fan, glass-panel wardrobe",
+      "room_03": "frames 16771 15309 5760: shampoo niches, geyser, shower mixer; also an LED cove and a door. Holds the bathroom plus the upper passage",
+      "room_04": "frame 1467 only, 8 cameras: curtained window bay, ceiling 1.86 m. Not in the tape; left unmapped",
+      "room_05": "frames 15460 5847 12955: corridor with Nice Day doormat, bedroom door with red bedspread"
+    },
+    "ae3edc814d": {
+      "room_01": "frames 2677 3174: bed with red bedspread, padded headboard, wardrobe",
+      "room_02": "frames 1184 4355 1697: mandir, wall clock, shoe rack, front door, view down the corridor",
+      "room_03": "frames 2032 3758 4131: deepest frame is a doorway onto the bedroom (passage); 4131 is the bathroom WC and basin. Merged passage and bathroom, named by the deepest frame"
+    }
+  }
 }

@@ -147,3 +147,48 @@ def test_drift_gate_fails_when_poses_are_used_as_is():
     )
     scored = {r.gate: r for r in score_capture(as_is, GroundTruth(records=[]), "test_cap")}
     assert scored["drift_accountability"].status is Status.FAIL
+
+
+def test_room_map_is_per_capture():
+    """The same room id names different rooms in different captures.
+
+    Room ids are assigned per reconstruction in order of area. On the benchmark flat the home
+    walk's room_01 is the bedroom and the long walk's room_01 is the hall, and a single flat map
+    scored the home bedroom as the hall and the long-walk bathroom as the passage.
+    """
+    from cozmo.bench.groundtruth import resolve_room
+
+    truth = GroundTruth(
+        records=[],
+        room_map={
+            "long_walk": {"room_01": "hall", "room_03": "bathroom"},
+            "home_walk": {"room_01": "bedroom"},
+        },
+    )
+    anon = Room(
+        room_id="room_01",
+        label="room",
+        polygon=[],
+        walls=[],
+        surfaces=[],
+        openings=[],
+        ceiling_height=None,
+        floor_area=Measure(value=2.0, lo=1.0, hi=3.0, unit="m2"),
+        perimeter=Measure(value=6.0, lo=5.0, hi=7.0, unit="m"),
+        observation_quality=0.5,
+    )
+    assert resolve_room(anon, truth, "long_walk") == "hall"
+    assert resolve_room(anon, truth, "home_walk") == "bedroom"
+    third = anon.model_copy(update={"room_id": "room_03"})
+    assert resolve_room(third, truth, "home_walk") is None, "a room absent from its capture's map stays unnamed"
+    assert resolve_room(anon, truth, "unknown_capture") is None, "a nested map is never applied to another capture"
+
+
+def test_room_map_loader_ignores_annotation_keys(tmp_path):
+    from cozmo.bench.groundtruth import load_ground_truth
+
+    path = tmp_path / "room_map.json"
+    path.write_text('{"_method": "from camera frames", "cap": {"room_01": "hall"}, "_evidence": {"cap": {}}}')
+    truth = load_ground_truth(tmp_path / "missing.csv", path)
+    assert set(truth.room_map) == {"cap"}
+    assert truth.room_name("cap", "room_01") == "hall"
