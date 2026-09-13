@@ -19,7 +19,7 @@ Requirement → where it lives → what it produces → status.
 | 1.4 | Photo tier, 2–8 stills per room, no depth or poses | `cozmo/io/photo.py`, `cozmo/pipeline/photo.py` | Runs on 58 real stills at 0.5× and 12 of the hall at 1× | **PARTIAL**: runs; fails its gates, the 1× hall at +136% |
 | 1.5 | Video tier, handheld walkthrough | `cozmo/pipeline/video.py` | Runs; whole-flat clip gives one room of about 371 m², the 17.87 m² assignment room gives 339.61 m² | **NOT MET** as a metric product |
 | 1.6 | LiDAR tier: depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | Home long walk: 5 rooms, 25.27 m², 7 openings, 3/4 taped connections; the assignment's two flat scans give 7 and 6 rooms | **MET** |
-| 1.7 | Device matrix | `capture/DEVICE_MATRIX.md` | Tier availability per device; accuracy cells pending | **PARTIAL** |
+| 1.7 | Device matrix | `capture/DEVICE_MATRIX.md` | Tier availability per device; accuracy filled from tape for LiDAR and photo, none for video, ceilings or openings | **PARTIAL** |
 | 1.8 | Same output contract from each tier | `cozmo/schema.py`, `cozmo/pipeline/__init__.py` | One `PropertyPlan`, one `reconstruct`, three builders | **MET** |
 | 1.9 | Intervals widen honestly as data thins | `cozmo/uncertainty/calibration.py` | Photo walls at ±3.0 m on average, but LiDAR intervals cover the tape on 0 of 31 measurements (2.24) | **PARTIAL** |
 
