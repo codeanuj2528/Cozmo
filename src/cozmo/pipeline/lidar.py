@@ -509,7 +509,6 @@ def build_lidar_plan(
             floor_y=levels.floor_height,
             book=book,
             tier=tier,
-            weights_dir=config.weights_dir,
         )
     timings["damage_s"] = time.perf_counter() - mark
     warnings.append(

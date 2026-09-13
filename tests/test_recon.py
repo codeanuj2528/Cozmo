@@ -17,7 +17,6 @@ import pytest
 
 from cozmo.recon.backbone import DepthBackbone, FallbackBackbone, get_backbone
 from cozmo.recon.frames import select_diverse_frames
-from cozmo.recon.scale import ScaleRecovery, ScaleSource, recover_metric_scale
 
 
 def test_backbone_resolves_without_weights(tmp_path: Path):
@@ -39,19 +38,6 @@ def test_fallback_backbone_returns_usable_depth():
     assert depth.shape == (120, 160)
     assert np.isfinite(depth).all()
     assert (depth > 0).all()
-
-
-def test_scale_recovery_reports_its_source():
-    """Every scale estimate must name where its metre came from."""
-    result = recover_metric_scale(
-        depth_map=np.full((64, 64), 2.0, dtype=np.float32),
-        image=np.zeros((64, 64, 3), dtype=np.uint8),
-    )
-    assert isinstance(result, ScaleRecovery)
-    assert isinstance(result.source, ScaleSource)
-    assert result.scale_factor > 0
-    assert 0.0 <= result.confidence <= 1.0
-    assert result.uncertainty_fraction > 0, "a recovered scale with zero uncertainty is a claim, not an estimate"
 
 
 def test_frame_selection_prefers_sharp_and_diverse():

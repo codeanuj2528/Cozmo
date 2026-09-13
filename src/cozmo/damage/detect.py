@@ -7,11 +7,11 @@ every room of every property including ones with no damage. Both carried
 `IntervalMethod.CONFORMAL`, which is the one field a reader uses to tell a calibrated
 interval from a guess.
 
-What replaces it responds to the image. When open-vocabulary weights are present they are
-used; when they are not, a classical detector runs, and the plan records which. The
-classical path is not a placeholder: discolouration and cracks have specific, separable
-appearances, and a detector built on them is defensible and runs on a machine that has
-never downloaded a model, which the walk-in test requires.
+What replaces it responds to the image: a classical detector for discolouration and cracks,
+which have specific, separable appearances and need no downloaded model, as the walk-in
+test requires. An open-vocabulary path that returned the same fixed box at 0.88 confidence
+for every prompt whenever its weights directory existed has been removed rather than left
+to fire.
 
 Detections are only reported once they land on a surface. A bounding box in an image is
 not a finding; a region of a named wall with an area in square metres is. Projection uses
@@ -226,60 +226,12 @@ def _reject_tiling_pattern(
     return [c for i, (c, _) in enumerate(candidates) if not suppressed[i]]
 
 
-_PROMPT_TO_CLASS = {
-    "water stain": DamageClass.WATER_STAIN,
-    "water damage": DamageClass.WATER_STAIN,
-    "stain": DamageClass.WATER_STAIN,
-    "crack": DamageClass.CRACK,
-    "cracked drywall": DamageClass.CRACK,
-    "mold": DamageClass.MOLD,
-    "mould": DamageClass.MOLD,
-    "peeling paint": DamageClass.PEELING_PAINT,
-    "hole": DamageClass.HOLE,
-    "smoke damage": DamageClass.SMOKE_SOOT,
-    "fire damage": DamageClass.SMOKE_SOOT,
-    "missing material": DamageClass.MISSING_MATERIAL,
-}
-
-
-def detect_in_image(
-    rgb: np.ndarray, frame_index: int = 0, weights_dir: Optional[Path] = None
-) -> tuple[list[ImageDetection], str]:
+def detect_in_image(rgb: np.ndarray, frame_index: int = 0) -> tuple[list[ImageDetection], str]:
     """All damage candidates in one frame, plus the name of the detector that found them.
 
-    The detector name is returned rather than logged because it belongs in the plan: a
-    reader has to be able to tell a finding from an open-vocabulary model from a finding
-    from a colour heuristic, and the two deserve different amounts of trust.
+    The detector name is returned rather than logged because it belongs in the plan, so a
+    reader can tell what produced a finding and how far to trust it.
     """
-    from cozmo.models import detect_open_vocabulary
-
-    try:
-        model_hits = detect_open_vocabulary(
-            rgb, prompts=list(_PROMPT_TO_CLASS), weights_dir=weights_dir
-        )
-    except Exception as exc:  # a missing or broken model must not take the pipeline down
-        log.warning("open-vocabulary detection unavailable: %s", exc)
-        model_hits = []
-
-    if model_hits:
-        out: list[ImageDetection] = []
-        for hit in model_hits:
-            bbox = hit.get("bbox")
-            damage_class = _PROMPT_TO_CLASS.get(str(hit.get("label", "")).lower())
-            if bbox is None or damage_class is None:
-                continue
-            out.append(
-                ImageDetection(
-                    frame_index=frame_index,
-                    damage_class=damage_class,
-                    bbox=tuple(float(v) for v in bbox),
-                    score=float(hit.get("confidence", 0.5)),
-                    detector="open_vocabulary",
-                )
-            )
-        if out:
-            return out, "open_vocabulary"
-
     classical = detect_water_stains(rgb) + detect_cracks(rgb)
     for detection in classical:
         detection.frame_index = frame_index
@@ -508,7 +460,6 @@ def detect_damage_for_rooms(
     book: IntervalBook,
     tier: Tier,
     frames_per_room: int = 6,
-    weights_dir: Optional[Path] = None,
 ) -> tuple[list[DamageRegion], str, int]:
     """Detect damage across a property and key each finding to a surface.
 
@@ -585,7 +536,7 @@ def detect_damage_for_rooms(
         depth, k_depth, pose, rgb_size = entry
         examined += 1
 
-        detections, detector_name = detect_in_image(rgb, frame_number, weights_dir)
+        detections, detector_name = detect_in_image(rgb, frame_number)
         if not detections:
             continue
 
