@@ -122,6 +122,14 @@ def build_cell_complex(
     # Direct interior evidence. The camera track is counted separately because a single
     # cell of it outweighs any amount of ambiguity: the operator physically stood there.
     evidence_mask = occ.floor_hits | (occ.free_mask & occ.observed)
+    # Ceiling above a face is interior evidence too, and it is what recovers the floor that
+    # furniture hides (see OccupancyMaps.ceiling_hits). It is kept out of cells that carry
+    # wall returns, so ceiling voxels averaged against the top of a partition cannot label
+    # the partition's own thickness as floor and bridge the rooms either side of it. Room
+    # separation is unaffected either way: two interior faces are still split into two
+    # rooms wherever their shared boundary has built wall behind it.
+    if occ.ceiling_hits is not None:
+        evidence_mask = evidence_mask | (occ.ceiling_hits & ~(occ.wall_weight > 0))
     flat = label_raster.ravel()
     total = np.bincount(flat, minlength=n + 1)[1:]
     hits = np.bincount(flat[evidence_mask.ravel()], minlength=n + 1)[1:]
