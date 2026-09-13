@@ -39,6 +39,7 @@ from cozmo.io.discover import read_image
 from cozmo.io.posed import PosedFrameSource
 from cozmo.pipeline.common import PipelineArtifacts, PipelineResult
 from cozmo.recon.backbone import get_backbone
+from cozmo.util.imaging import low_light_fraction
 from cozmo.recon.frames import select_diverse_frames
 from cozmo.recon.monocular import intrinsics_from_exif, make_metric
 from cozmo.recon.register import register_room
@@ -422,7 +423,9 @@ def build_photo_plan(
     stitched, adjacency, stitch_warnings = stitch_property([r.room for r in recovered])
     warnings.extend(stitch_warnings)
 
-    from cozmo.geometry.assemble import total_area
+    from cozmo.geometry.assemble import total_area, unmet_adjacency_warnings
+
+    warnings.extend(unmet_adjacency_warnings(stitched, adjacency))
 
     plan = PropertyPlan(
         pipeline_version=__version__,
@@ -463,8 +466,9 @@ def build_photo_plan(
             frames_used=sum(r.frames_used for r in reconstructions),
             median_depth_confidence=None,
             surface_coverage=float(len(recovered) / max(len(reconstructions), 1)),
-            low_light_fraction=0.0,
-            specular_fraction=0.0,
+            low_light_fraction=low_light_fraction(
+                [image for entry in room_data for image in entry[4].values()]
+            ),
             warnings=warnings + [f"depth backbone: {backbone.name}"],
         ),
         total_floor_area=total_area(stitched, book, Tier.PHOTO),

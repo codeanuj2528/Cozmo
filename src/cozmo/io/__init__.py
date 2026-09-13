@@ -14,30 +14,37 @@ from cozmo.schema import Tier
 
 
 def load_capture(root: Path | str, capture_id: str | None = None) -> CaptureSource:
-    """Load a capture source automatically identifying its tier."""
+    """Load a capture source, identifying its tier from the files present.
+
+    An optional capture.json beside the capture may name the tier, the capture id and the
+    device model. Stray Scanner exports record no device model of their own, so for LiDAR and
+    video the declared model is the only source; photographs keep the model their EXIF records.
+    """
     p = Path(root)
     if not p.exists():
         raise FileNotFoundError(f"Capture path does not exist: {root}")
 
-    # Read capture.json if present
+    declared: dict = {}
     c_json = p / "capture.json"
     if c_json.exists():
-        data = json.loads(c_json.read_text())
-        tier_str = data.get("tier", "").lower()
-        if tier_str == "lidar":
-            return StrayCapture(p, capture_id=capture_id or data.get("capture_id"))
-        elif tier_str == "video":
-            return VideoCapture(p, capture_id=capture_id or data.get("capture_id"))
-        elif tier_str == "photo":
-            return PhotoCapture(p, capture_id=capture_id or data.get("capture_id"))
+        declared = json.loads(c_json.read_text())
+    capture_id = capture_id or declared.get("capture_id")
+    device = {"device_model": declared["device_model"]} if declared.get("device_model") else {}
+    tier_str = str(declared.get("tier", "")).lower()
 
-    # Auto-detect format based on files present
+    if tier_str == "lidar":
+        return StrayCapture(p, capture_id=capture_id, **device)
+    if tier_str == "video":
+        return VideoCapture(p, capture_id=capture_id, **device)
+    if tier_str == "photo":
+        return PhotoCapture(p, capture_id=capture_id)
+
     if (p / "odometry.csv").exists() or any((p / sub / "odometry.csv").exists() for sub in p.iterdir() if sub.is_dir()):
-        return StrayCapture(p, capture_id=capture_id)
+        return StrayCapture(p, capture_id=capture_id, **device)
 
     video_files = find_videos(p)
     if video_files and not (p / "depth").exists():
-        return VideoCapture(p, capture_id=capture_id)
+        return VideoCapture(p, capture_id=capture_id, **device)
 
     return PhotoCapture(p, capture_id=capture_id)
 

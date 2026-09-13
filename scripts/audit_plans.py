@@ -7,17 +7,16 @@ class of defect that a laser would otherwise have to catch for us.
 The checks, and why each one exists:
 
 `area_vs_polygon`   floor_area should be the area of the polygon it was computed from.
+`outline_valid`     the floor outline should be a valid simple polygon, by shapely's test.
 `ring_closure`      the wall ring should close and its enclosed area should match floor_area.
-                    A room reporting 4.48 m2 with four walls over 5 m long is geometrically
-                    impossible, and only this check notices.
-`wall_vs_area`      no wall may be longer than the diagonal of a box of the room's own area
-                    times a generous aspect allowance.
+`widest_point`      a region too narrow to stand in at its widest point is not a room.
 `ceiling_measured`  a ceiling height of exactly 0.0 is not a measurement. It is the absence
                     of one being reported as one, with an interval that brackets zero.
 `interval_sanity`   no physical quantity may have a negative lower bound.
-`interval_width`    an interval tighter than the sensor can support is confident garbage.
-`openings`          a room with no opening at all cannot be entered, so zero openings across
-                    a whole property is a detection failure rather than a property feature.
+`adjacency`         rooms declared connected should be drawn touching.
+`reports`           drift, quality and device fields should hold a measurement or say they do
+                    not, never a default that reads as one.
+`calibration`       an interval method with no empirical coverage is named as such.
 
 Usage:
     python scripts/audit_plans.py <dir-with-plan.json> [more dirs ...]
@@ -45,42 +44,45 @@ def polygon_area(points: list[list[float]]) -> float:
     return abs(total) / 2.0
 
 
-def is_self_intersecting(points: list[list[float]]) -> bool:
-    """True when any two non-adjacent edges of the ring cross.
+def invalid_reason(points: list[list[float]]) -> str | None:
+    """Why a floor outline is not a valid simple polygon, or None when it is.
 
-    A self-intersecting floor outline is the signature of corners recovered by intersecting
-    two nearly-parallel wall planes: the intersection lands far outside the room and the
-    ring folds over itself. Shoelace area stays finite and plausible-looking, which is why
-    the area check alone does not catch it.
+    Shapely's validity test rather than a hand-rolled crossing test. The hand-rolled one
+    treated an endpoint lying on another edge as a crossing, and flagged outlines that shapely
+    finds valid and whose area equals their reported floor area.
     """
+    from shapely.geometry import Polygon
+    from shapely.validation import explain_validity
 
-    def segments_cross(p1, p2, p3, p4) -> bool:
-        def orient(a, b, c):
-            v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-            return 0 if abs(v) < 1e-12 else (1 if v > 0 else -1)
+    reason = explain_validity(Polygon(points))
+    return None if reason == "Valid Geometry" else reason
 
-        o1, o2 = orient(p1, p2, p3), orient(p1, p2, p4)
-        o3, o4 = orient(p3, p4, p1), orient(p3, p4, p2)
-        return o1 != o2 and o3 != o4
 
-    n = len(points)
-    for i in range(n):
-        a1, a2 = points[i], points[(i + 1) % n]
-        for j in range(i + 2, n):
-            if i == 0 and j == n - 1:
-                continue  # adjacent across the wrap
-            b1, b2 = points[j], points[(j + 1) % n]
-            if segments_cross(a1, a2, b1, b2):
-                return True
-    return False
+def widest_point(points: list[list[float]]) -> float:
+    """Diameter of the largest circle that fits inside the outline."""
+    from shapely.geometry import Polygon
+
+    shape = Polygon(points)
+    if not shape.is_valid:
+        shape = shape.buffer(0)
+    minx, miny, maxx, maxy = shape.bounds
+    lo, hi = 0.0, max(maxx - minx, maxy - miny)
+    for _ in range(30):
+        mid = (lo + hi) / 2.0
+        if shape.buffer(-mid).is_empty:
+            hi = mid
+        else:
+            lo = mid
+    return 2.0 * lo
 
 
 # A quantity that cannot physically be negative. Used for the interval lower-bound check.
 NON_NEGATIVE = ("area", "length", "height", "width", "perimeter")
 
-# Below this mean width (2 * area / perimeter) a region is not a room. Set just under the
-# narrowest space a person occupies -- a 0.75 m closet -- so genuine corridors survive.
-MIN_ROOM_MEAN_WIDTH_M = 0.70
+# Narrower than this at its widest point, a region is not a room: nobody can stand in it. A
+# 0.75 m closet or the benchmark flat's 0.76 m passage clears it. Mean width, 2 * area /
+# perimeter, was used before and reads a 0.80 by 2.55 m corridor as 0.60 m wide.
+MIN_ROOM_WIDEST_POINT_M = 0.60
 
 
 def audit_plan(path: Path) -> dict:
@@ -112,9 +114,10 @@ def audit_plan(path: Path) -> dict:
                     f"{rid}: floor_area {reported_area:.2f} m2 but its polygon encloses "
                     f"{shoelace:.2f} m2 ({abs(shoelace - reported_area) / reported_area * 100:.0f}% apart)"
                 )
-            if len(poly) >= 4 and is_self_intersecting(poly):
+                        reason = invalid_reason(poly) if len(poly) >= 3 else None
+            if reason:
                 selfint += 1
-                findings.append(f"{rid}: floor outline is self-intersecting")
+                findings.append(f"{rid}: floor outline is not a valid polygon ({reason})")
 
         # wall ring closure and the area it encloses
         walls = room.get("walls", [])
@@ -131,30 +134,15 @@ def audit_plan(path: Path) -> dict:
                         f"floor_area of {reported_area:.2f} m2"
                     )
 
-            # Mean width, 2 * area / perimeter. This replaces an earlier check that
-            # compared each wall length against the diagonal of a 1:4 box of the room's
-            # area and called anything longer "geometrically impossible". That check was
-            # wrong: it flagged c7d28f72c6 room_03 for holding 7.65 m walls in 4.48 m2,
-            # but that polygon is valid and simple and its area does match its ring. The
-            # region is a 0.31 m wide hairpin ribbon, which is a real defect but a
-            # different one, and the old test would also have failed any genuine corridor.
-            #
-            # Mean width measures the thing that is actually wrong and is scale-free. A
-            # region narrower than this on average is not a room a person stands in; it is
-            # a gap between two wall lines that segmentation handed a room id.
-            if reported_area > 0:
-                perimeter = sum(
-                    math.dist(poly[i], poly[(i + 1) % len(poly)]) for i in range(len(poly))
-                ) if poly else 0.0
-                if perimeter > 0:
-                    mean_width = 2.0 * reported_area / perimeter
-                    if mean_width < MIN_ROOM_MEAN_WIDTH_M:
-                        sliver_rooms += 1
-                        findings.append(
-                            f"{rid}: mean width {mean_width:.2f} m "
-                            f"(area {reported_area:.2f} m2, perimeter {perimeter:.2f} m) is "
-                            f"below {MIN_ROOM_MEAN_WIDTH_M} m, so this is a sliver rather than a room"
-                        )
+                        # Width at the widest point, not mean width: see MIN_ROOM_WIDEST_POINT_M.
+            if reported_area > 0 and len(poly) >= 3:
+                width = widest_point(poly)
+                if width < MIN_ROOM_WIDEST_POINT_M:
+                    sliver_rooms += 1
+                    findings.append(
+                        f"{rid}: only {width:.2f} m wide at its widest point "
+                        f"(area {reported_area:.2f} m2), so this is a sliver rather than a room"
+                    )
 
         # A ceiling that was never observed must be absent, not zero. `null` is the correct
         # answer and is not counted as a defect; an explicit 0.0 is.

@@ -567,3 +567,31 @@ def _translate_room(room: Room, tx: float, ty: float) -> None:
     for wall in room.walls:
         wall.start = (wall.start[0] + tx, wall.start[1] + ty)
         wall.end = (wall.end[0] + tx, wall.end[1] + ty)
+
+
+# A partition is 0.1-0.25 m thick, so rooms drawn that far apart can still share one wall.
+UNMET_ADJACENCY_TOLERANCE_M = 0.30
+
+
+def unmet_adjacency_warnings(rooms, adjacencies, tolerance_m: float = UNMET_ADJACENCY_TOLERANCE_M) -> list[str]:
+    """Declared connections the drawn plan does not show.
+
+    Gap closing moves each room onto one neighbour, so a room with two declared neighbours can
+    end up touching one and far from the other. The connection is still evidence from the
+    capture; the drawing does not show it, and the plan says so rather than leave a reader to
+    find the gap.
+    """
+    shapes = {room.room_id: Polygon(room.polygon) for room in rooms if len(room.polygon) >= 3}
+    warnings: list[str] = []
+    for edge in adjacencies:
+        a, b = shapes.get(edge.room_a), shapes.get(edge.room_b)
+        if a is None or b is None:
+            continue
+        gap = float(a.distance(b))
+        if gap > tolerance_m:
+            warnings.append(
+                f"{edge.room_a} and {edge.room_b} are declared connected but drawn {gap:.2f} m "
+                "apart, so the plan does not show that connection"
+            )
+    return warnings
+

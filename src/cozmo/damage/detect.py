@@ -32,6 +32,7 @@ import numpy as np
 
 from cozmo.schema import DamageClass, DamageRegion, ExtentKind, Measure, Tier
 from cozmo.uncertainty.calibration import IntervalBook
+from cozmo.util.imaging import LOW_LIGHT_MEAN_LUMA, mean_luma
 
 log = logging.getLogger(__name__)
 
@@ -460,7 +461,7 @@ def detect_damage_for_rooms(
     book: IntervalBook,
     tier: Tier,
     frames_per_room: int = 6,
-) -> tuple[list[DamageRegion], str, int]:
+) -> tuple[list[DamageRegion], str, int, float | None]:
     """Detect damage across a property and key each finding to a surface.
 
     Frames are attributed to rooms by where the camera stood, so a bedroom's walls are
@@ -469,11 +470,12 @@ def detect_damage_for_rooms(
     is foreshortened, poorly lit and frequently half-occluded, and it produces exactly the
     low-quality detections that a per-surface extent then reports as fact.
 
-    Returns the regions, the name of the detector that produced them, and how many frames
-    were examined, both of which belong in the quality report.
+    Returns the regions, the name of the detector that produced them, how many frames were
+    examined, and the share of those frames too dark to trust (None when none were
+    examined). The last three belong in the quality report.
     """
     if not rooms or len(camera_positions) == 0:
-        return [], "none", 0
+        return [], "none", 0, None
 
     room_by_key = {}
     for room in rooms:
@@ -501,7 +503,7 @@ def detect_damage_for_rooms(
             wanted.setdefault(int(position), []).append(room.room_id)
 
     if not wanted:
-        return [], "none", 0
+        return [], "none", 0, None
 
     frame_numbers = (
         source.frame_indices() if hasattr(source, "frame_indices") else list(range(len(keyframes)))
@@ -511,9 +513,9 @@ def detect_damage_for_rooms(
         images = source.load_rgb_batch(sorted(set(position_to_frame.values())))
     except Exception as exc:
         log.warning("colour frames unavailable, damage detection skipped: %s", exc)
-        return [], "none", 0
+        return [], "none", 0, None
     if not images:
-        return [], "none", 0
+        return [], "none", 0, None
 
     depth_by_frame: dict[int, tuple] = {}
     for frame in source.frames([keyframes[p] for p in sorted(wanted)]):
@@ -526,6 +528,7 @@ def detect_damage_for_rooms(
     projections: list[tuple[str, str, np.ndarray, np.ndarray, ImageDetection]] = []
     detector_name = "classical"
     examined = 0
+    dark = 0
 
     for position in sorted(wanted):
         frame_number = position_to_frame[position]
@@ -535,6 +538,8 @@ def detect_damage_for_rooms(
             continue
         depth, k_depth, pose, rgb_size = entry
         examined += 1
+        if mean_luma(rgb) < LOW_LIGHT_MEAN_LUMA:
+            dark += 1
 
         detections, detector_name = detect_in_image(rgb, frame_number)
         if not detections:
@@ -564,4 +569,4 @@ def detect_damage_for_rooms(
                 projections.append((room_id, surface_id, uv, world, detection))
 
     regions = build_damage_regions(projections, book, tier, detector_name)
-    return regions, (detector_name if regions else "none"), examined
+    return regions, (detector_name if regions else "none"), examined, (dark / examined if examined else None)

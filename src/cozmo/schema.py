@@ -204,7 +204,13 @@ class DriftReport(BaseModel):
     residual_before_m: float
     residual_after_m: float
     max_pose_correction_m: float
-    footprint_area_before_m2: float
+    footprint_area_before_m2: float | None = Field(
+        default=None,
+        description=(
+            "Footprint with drift correction off. None when correction was applied, because "
+            "producing it takes a second floor-plan pass: run with --no-drift-correction."
+        ),
+    )
     footprint_area_after_m2: float
     applied: bool
 
@@ -224,8 +230,22 @@ class QualityReport(BaseModel):
     frames_used: int
     median_depth_confidence: float | None
     surface_coverage: float = Field(ge=0.0, le=1.0)
-    low_light_fraction: float
-    specular_fraction: float = Field(description="Fraction of surface area flagged mirror/glass.")
+    low_light_fraction: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Share of the colour frames examined whose mean luma is below 50 of 255. None when "
+            "no colour frame was examined."
+        ),
+    )
+    specular_fraction: float | None = Field(
+        default=None,
+        description=(
+            "Fraction of surface area flagged mirror or glass. None: opening detection rejects "
+            "mirror candidates, but no stage measures mirror or glass area."
+        ),
+    )
     warnings: list[str]
 
 

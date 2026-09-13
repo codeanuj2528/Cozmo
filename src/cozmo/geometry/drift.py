@@ -309,7 +309,7 @@ def correct_drift(
         residual_before_m=before,
         residual_after_m=after,
         max_pose_correction_m=float(shift.max()) if len(shift) else 0.0,
-        footprint_area_before_m2=0.0,
+        footprint_area_before_m2=None,
         footprint_area_after_m2=0.0,
         applied=bool(closures),
     )

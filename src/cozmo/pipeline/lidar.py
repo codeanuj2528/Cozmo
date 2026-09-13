@@ -34,6 +34,7 @@ from cozmo.geometry.assemble import (
     RoomGeometry,
     build_room,
     close_declared_gaps,
+    unmet_adjacency_warnings,
     match_adjacency,
     room_levels,
     total_area,
@@ -165,8 +166,6 @@ def _quality_report(
         frames_used=len(keyframes),
         median_depth_confidence=median_confidence,
         surface_coverage=coverage,
-        low_light_fraction=0.0,
-        specular_fraction=0.0,
         warnings=list(warnings),
     )
 
@@ -315,7 +314,7 @@ def build_lidar_plan(
         residual_before_m=0.0,
         residual_after_m=0.0,
         max_pose_correction_m=0.0,
-        footprint_area_before_m2=0.0,
+        footprint_area_before_m2=None,
         footprint_area_after_m2=0.0,
         applied=False,
     )
@@ -471,6 +470,7 @@ def build_lidar_plan(
     if not adjacency:
         adjacency = match_adjacency(rooms, lookups)
     warnings.extend(close_declared_gaps(rooms, adjacency))
+    warnings.extend(unmet_adjacency_warnings(rooms, adjacency))
 
     quality = _quality_report(
         source, cloud, keyframes, rooms, occupancy, tier, warnings
@@ -496,9 +496,9 @@ def build_lidar_plan(
 
     mark = time.perf_counter()
     damage: list[DamageRegion] = []
-    damage_detector, frames_examined = "disabled", 0
+    damage_detector, frames_examined, low_light = "disabled", 0, None
     if config.detect_damage:
-        damage, damage_detector, frames_examined = detect_damage_for_rooms(
+        damage, damage_detector, frames_examined, low_light = detect_damage_for_rooms(
             rooms=rooms,
             source=source,
             keyframes=keyframes,
@@ -511,6 +511,7 @@ def build_lidar_plan(
             tier=tier,
         )
     timings["damage_s"] = time.perf_counter() - mark
+    quality.low_light_fraction = low_light
     warnings.append(
         f"damage detector: {damage_detector}, {frames_examined} frames examined, "
         f"{len(damage)} regions"
