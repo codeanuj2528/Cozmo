@@ -2,7 +2,9 @@
 
 Everything in this directory reports numbers that no run produced. It is kept, rather than
 deleted, so the audit that found it can be checked, and so the honest versions can be
-written against the same structure. **Nothing here goes in the submission.**
+written against the same structure. **Nothing here goes in the submission.** That includes `quarantine/scripts/generate_benchmarks.py`
+and `quarantine/scripts/build_pdf.py`, moved out of `scripts/` so a reviewer cannot regenerate
+the fake PASS / Magicplan tables by running a path that looks official.
 
 ## What was wrong with each
 

@@ -76,7 +76,7 @@ almost no texture but always share the room's shape.
 
 Measured accuracy is not tabulated here because the laser ground truth for the benchmark
 property has not been recorded. `capture/DEVICE_MATRIX.md` carries those cells marked
-`pending`, filled by `cozmo bench` and never by hand.
+`pending`, filled by `cozmo benchmark` and never by hand.
 
 ---
 
@@ -239,10 +239,11 @@ difference between no ceiling heights and 1.86–2.63 m per room.
 
 ## 8. State of the evidence
 
-The LiDAR tier works on `163f18d3ac`, a 96.6 m walk: 6 rooms, 27.20 m², per-room ceiling
-heights 1.86–2.63 m, 10 openings, 5 adjacencies, 235 s. That capture is in `data/raw/`; the
-benchmark slot holds `ae3edc814d`, a 23.1 m walk giving 3 rooms and 16.69 m². `AUDIT.md`
-carries the measured gate status and the defect register.
+The LiDAR tier works on `163f18d3ac`, a 96.6 m walk: **5 rooms, 25.25 m²**, per-room ceiling
+heights 1.86–2.63 m, 7 openings, 4 adjacencies at gap 0, 82 s (`docs/verified_lidar.md`).
+An earlier 6-room / 27.20 m² figure on this walk was before split-room merge; do not quote
+it. The benchmark slot holds `ae3edc814d`, a 23.1 m walk giving 3 rooms and 16.69 m².
+`AUDIT.md` carries the measured gate status and the defect register.
 
 Ten of fourteen gates report `SKIP`, because laser ground truth for the benchmark property
 has not been recorded. They are not reported as passing, and the marks for those rows are

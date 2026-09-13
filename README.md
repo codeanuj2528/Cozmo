@@ -9,12 +9,24 @@ Four commands, about ten minutes, most of it the first model download.
 
 ```bash
 git clone <this repo> && cd cozmo
-curl -LsSf https://astral.sh/uv/install.sh | sh     # if uv is not already present
-uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[ml]"
+./scripts/setup.sh                                   # venv + LiDAR smoke test on a 3.60×2.80×2.50 m box
+# Photo/video only:
 ./scripts/fetch_weights.sh                           # ~95 MB, the only network access
 ```
 
-Then, one command per capture:
+`scripts/setup.sh` picks a CPython 3.11–3.12 interpreter (`requires-python` in
+`pyproject.toml`), installs `.[dev]`, ray-traces a known box, and reconstructs it.
+Weights stay opt-in: LiDAR is pure geometry. Photo/video also need `.[ml]` before
+`scripts/fetch_weights.sh`.
+
+**Try it now (no capture required):** after setup, open the plans we already ran.
+
+```bash
+open reports/verified/single_room/plan.png      # 1 room, 17.36 m², assignment zip
+open reports/verified/multiroom_home/plan.png   # 3 rooms, 16.69 m² — the product
+```
+
+Then, one command per new capture:
 
 ```bash
 .venv/bin/python -m cozmo.cli run --input <capture-dir> --out runs/my_capture
@@ -56,7 +68,7 @@ Subfolder names become the room labels on the plan.
 # Score every run against laser ground truth. Gates with no truth behind them report SKIP,
 # never PASS.
 .venv/bin/python -m cozmo.cli benchmark --runs runs --ground-truth capture/ground_truth.csv \
-    --out reports/benchmark
+    --room-map capture/room_map.json --out reports/benchmark
 
 # Fit split-conformal interval quantiles from measured residuals. Writes nothing if there
 # are no residuals.
@@ -65,6 +77,11 @@ Subfolder names become the room labels on the plan.
 # Drift on/off ablation
 .venv/bin/python -m cozmo.cli run --input <dir> --out runs/no_drift --no-drift-correction
 ```
+
+## What to show an examiner
+
+`SUBMIT.md` — which plans are real, which failures to disclose, what not to invent.
+`benchmark_report.md` — one-page PASS / FAIL / SKIP headline.
 
 ## Where to look
 
@@ -108,42 +125,27 @@ you are looking for a tier-specific bug, it is almost certainly in the front hal
 .venv/bin/python -m pytest tests/ -q
 ```
 
-40 tests. They cover the geometry primitives against closed-form answers, the detectors
-against synthetic walls where the right answer is known, and the schema contract. Several
-exist because a defect got past review and into a real run; those name the defect in the
-docstring.
+50 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
+intervals, and the schema contract. Several exist because a defect got past review.
 
 ## State of the evidence
 
-Read `AUDIT.md` before this section. It carries the measured gate status, a defect register
-and the fix plan, and every number in it names the capture it came from.
+Current numbers: `docs/verified_lidar.md` and `SUBMIT.md`. `AUDIT.md` is the 12 Sep
+self-audit; its 6-room / 27.20 m² / 2-room `c00a170fe1` lines are **pre-merge** and
+superseded.
 
-The LiDAR tier works, on one capture: `163f18d3ac`, a 96.6 m walk, returns 6 rooms, 27.20 m²,
-10 openings and 5 adjacencies in 235 s. Its per-room ceiling heights are 1.86–2.63 m, and the
-1.86 m is a soffit mistaken for a ceiling rather than a room. **That capture lives in
-`data/raw/`, not in the benchmark slot:** `DROP_CAPTURES_HERE/01_multiroom_lidar` holds
-`ae3edc814d`, a 23.1 m walk that returns 3 rooms and 16.69 m². Numbers in the other documents
-that read "6 rooms, 27.20 m²" belong to `163f18d3ac` and are being corrected to say so.
+| Capture | Rooms | Area | Show? |
+|---|---|---|---|
+| `c00a170fe1` | **1** | **17.36 m²** | yes — walk-in |
+| `ae3edc814d` | **3** | **16.69 m²** | yes — stitched home |
+| `163f18d3ac` | **5** | **25.25 m²** | yes — long walk |
+| same-room video | 2 | 339.61 m² | disclose fail |
+| home walkthrough video | 1 | ~371 m² | disclose fail; do not lead |
+| bathroom 0.5× photos | 0 | 0.00 m² | bathroom-only, not the 4-folder run |
+| home 4-folder photos | 2 | 60.87 m² | disclose fail vs tape 28.75 |
 
-The photo tier recovers 2 of 4 rooms with no openings and no adjacency, so it does not stitch.
-
-**The video tier does not work, and you should not choose it for the walk-in test.** Two things
-to know before you run it. It is OOM-killed on a 16 GB machine, and the wrapper still exits 0,
-so a silent failure looks like a hang. And when it does complete, its footprint is meaningless:
-`register_sequential` does not recover camera motion from the clip. Sampling the same walk at
-40 and at 120 keyframes leaves the median step between keyframes unchanged at ~1.7 m, where a
-walk sampled three times as often should give steps three times shorter. It credits the
-operator with walking 207 m inside a flat 10 m across, and with rising and falling 13.1 m in a
-single-storey property. `AUDIT.md` E1 has the table; regenerate it with
-`.venv/bin/python scripts/diagnose_video.py <clip> --keyframes 120`. **Choose the LiDAR tier**,
-where `163f18d3ac` reconstructs in 235 s.
-
-Rooms are also over-segmented at every tier. Of 24 rooms across the five LiDAR captures, **10
-have a mean width below 0.70 m** — the narrowest 0.31 m — so they are gaps between wall lines
-rather than rooms, and 4 of `163f18d3ac`'s 6 rooms are among them. A capture of a *single*
-room, `c00a170fe1`, is reported as 2. `AUDIT.md` D18 has the numbers; regenerate with
-`.venv/bin/python scripts/audit_plans.py --glob "reports/eval_*"`.
-
-No laser or tape ground truth exists for any capture, so every accuracy gate reports `SKIP`.
-`capture/ground_truth.csv` is the empty template on purpose: it was briefly filled with
-invented rows, and `quarantine/README.md` records what was removed and why.
+**Choose the LiDAR tier for walk-in.** Photo stills on disk are 0.5× ultra-wide; video
+scale is not metric. Home tape is in `capture/ground_truth.csv` (`tool=tape`):
+footprint gates **FAIL** (16.69 / 25.25 vs 28.75 m²). Ceiling and door rows are
+still empty, so those gates stay `SKIP`. `quarantine/` is the audit trail of
+removed fakes — do not quote it.

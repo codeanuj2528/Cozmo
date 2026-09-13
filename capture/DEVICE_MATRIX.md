@@ -26,7 +26,7 @@ conformal intervals are fitted to; the median is roughly half of each.
 | Repeatability per wall | pending | pending | pending | 1 cm or 0.5% |
 | Whole-property footprint | pending | pending | pending | photo 8% |
 
-`pending` is filled by `cozmo bench` and is not filled by hand. A number in this table that
+`pending` is filled by `cozmo benchmark` and is not filled by hand. A number in this table that
 was not produced by a benchmark run is a claim, and the point of the table is that it
 contains no claims.
 

@@ -89,16 +89,37 @@ photo tier.
 
 ## 4. Regeneration
 
+The annotated tag `fixloop-before` sits on a **rewritten** history and is **not** an
+ancestor of current `HEAD`. Do not `git checkout fixloop-before` or
+`git diff fixloop-before..HEAD` — that diff is 61 files, not the fix.
+
+The declaration commit on this graph is `d15c21b`. The fix is `80c44f3`.
+
+Photos live **outside** this repo: `../DROP_CAPTURES_HERE/03_multiroom_photos/`.
+Without that folder the before/after JSON already committed is the evidence.
+
 ```bash
-# before  (this repository at the commit tagged fixloop-before)
-cozmo run --input DROP_CAPTURES_HERE/03_multiroom_photos --out fixloop/before
+# readable fix (not the orphaned tag)
+git diff d15c21b..80c44f3
+
+# before — needs the photo folders next to the repo
+git checkout d15c21b
+.venv/bin/python -m cozmo.cli run \
+  --input ../DROP_CAPTURES_HERE/03_multiroom_photos \
+  --out fixloop/before
 
 # after
-cozmo run --input DROP_CAPTURES_HERE/03_multiroom_photos --out fixloop/after
+git checkout 80c44f3   # or main
+.venv/bin/python -m cozmo.cli run \
+  --input ../DROP_CAPTURES_HERE/03_multiroom_photos \
+  --out fixloop/after
 
-# the gate table for both
-cozmo benchmark --runs fixloop --ground-truth capture/ground_truth.csv --out fixloop/gates
+# accuracy gates SKIP until capture/ground_truth.csv has laser rows
+.venv/bin/python -m cozmo.cli benchmark \
+  --runs fixloop --ground-truth capture/ground_truth.csv --out fixloop/gates
 ```
 
 `fixloop/before/` is committed alongside this declaration, produced by the code as it stands
-at this commit.
+at this commit. Compare footprints in the two `plan.json` files (142.03 m² → 17.37 m²),
+not a laser gate. The ±8% gate still fails. Do not run `cozmo fixloop` for this story —
+that CLI is the wall-snap ablation, not the EXIF fix.

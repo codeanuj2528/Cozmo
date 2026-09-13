@@ -110,6 +110,27 @@ def test_no_ground_truth_never_passes_an_accuracy_gate():
         )
 
 
+def test_photo_folder_label_beats_lidar_room_map():
+    from cozmo.bench.groundtruth import resolve_room
+
+    truth = GroundTruth(records=[], room_map={"room_01": "hall"})
+    photo_bath = Room(
+        room_id="room_01",
+        label="bathroom",
+        polygon=[],
+        walls=[],
+        surfaces=[],
+        openings=[],
+        ceiling_height=None,
+        floor_area=Measure(value=2.0, lo=1.0, hi=3.0, unit="m2"),
+        perimeter=Measure(value=6.0, lo=5.0, hi=7.0, unit="m"),
+        observation_quality=0.5,
+    )
+    lidar_anon = photo_bath.model_copy(update={"label": "room"})
+    assert resolve_room(photo_bath, truth) == "bathroom"
+    assert resolve_room(lidar_anon, truth) == "hall"
+
+
 def test_drift_gate_fails_when_poses_are_used_as_is():
     """The brief makes this an automatic fail, so it is asserted rather than assumed."""
     as_is = _plan(

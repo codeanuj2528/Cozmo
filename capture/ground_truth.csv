@@ -1,14 +1,54 @@
 capture_id,room,quantity,identifier,value_m,tool,notes
-# quantity is one of:
-#   ceiling_height   identifier = reading number (1,2,3); record all readings taken
-#   wall_length      identifier = wall name you also use on the sketch (N,E,S,W or 1,2,3)
-#   room_diagonal    identifier = corner pair (NE_SW)
-#   opening_width    identifier = opening name (door_corridor, window_1)
-#   opening_height   identifier = same opening name
-#   opening_sill     identifier = same opening name; 0 for a door
-#   damage_width     identifier = damage name (stain_ceiling, crack_north)
-#   damage_height    identifier = same damage name
-#   adjacency        identifier = other room name; value_m = 1; notes = opening name
-# tool is one of: laser, tape
-# Delete these comment lines before running cozmo bench, or leave them: lines starting
-# with # are skipped.
+# Tape, 13 Sep 2026. Operator-stated feet converted at 1 ft = 0.3048 m, 1 sq ft = 0.09290304 m2.
+# Hall 16 x 10 ft = 160 sq ft. Bedroom 10 x 10 ft = 100 sq ft.
+# Bathroom area only (22 sq ft); no wall tape. Passage 2.5 ft wide x 11 ft long.
+# Layout (operator + photos): hall -- passage -- bedroom. Bathroom door sits at the
+# hall/passage junction (Nice Day mat); attached to hall and to passage, not to bedroom.
+# room_map.json maps reconstructed ids by that walk order, never by area:
+#   room_01 = hall, room_03 = passage, room_02 = bedroom
+#   room_05 = bathroom (only on 163f18d3ac). room_04 is an unmapped hall sliver.
+# No ceiling, diagonal, or opening tape yet. Do not invent those rows.
+# quantity also allows floor_area and adjacency (value_m = 1).
+# tool=tape. Same physical rooms on both home LiDAR captures.
+ae3edc814d,hall,wall_length,1,4.8768,tape,16 ft
+ae3edc814d,hall,wall_length,2,3.0480,tape,10 ft
+ae3edc814d,hall,wall_length,3,4.8768,tape,16 ft
+ae3edc814d,hall,wall_length,4,3.0480,tape,10 ft
+ae3edc814d,hall,floor_area,room,14.8645,tape,160 sq ft
+ae3edc814d,bedroom,wall_length,1,3.0480,tape,10 ft
+ae3edc814d,bedroom,wall_length,2,3.0480,tape,10 ft
+ae3edc814d,bedroom,wall_length,3,3.0480,tape,10 ft
+ae3edc814d,bedroom,wall_length,4,3.0480,tape,10 ft
+ae3edc814d,bedroom,floor_area,room,9.2903,tape,100 sq ft
+ae3edc814d,bathroom,floor_area,room,2.0439,tape,22 sq ft; walls not taped
+ae3edc814d,passage,wall_length,1,3.3528,tape,11 ft length
+ae3edc814d,passage,wall_length,2,0.7620,tape,2.5 ft width
+ae3edc814d,passage,wall_length,3,3.3528,tape,11 ft length
+ae3edc814d,passage,wall_length,4,0.7620,tape,2.5 ft width
+ae3edc814d,passage,floor_area,room,2.5548,tape,2.5 x 11 ft
+ae3edc814d,hall,adjacency,passage,1,tape,door at hall into passage
+ae3edc814d,passage,adjacency,bedroom,1,tape,door at far end of passage
+ae3edc814d,hall,adjacency,bathroom,1,tape,bath door at hall/passage junction
+ae3edc814d,passage,adjacency,bathroom,1,tape,same bath door opens onto passage
+ae3edc814d,,footprint_area,property,28.7535,tape,hall+bedroom+bathroom+passage
+163f18d3ac,hall,wall_length,1,4.8768,tape,same tape as ae3edc814d; 16 ft
+163f18d3ac,hall,wall_length,2,3.0480,tape,10 ft
+163f18d3ac,hall,wall_length,3,4.8768,tape,16 ft
+163f18d3ac,hall,wall_length,4,3.0480,tape,10 ft
+163f18d3ac,hall,floor_area,room,14.8645,tape,160 sq ft
+163f18d3ac,bedroom,wall_length,1,3.0480,tape,10 ft
+163f18d3ac,bedroom,wall_length,2,3.0480,tape,10 ft
+163f18d3ac,bedroom,wall_length,3,3.0480,tape,10 ft
+163f18d3ac,bedroom,wall_length,4,3.0480,tape,10 ft
+163f18d3ac,bedroom,floor_area,room,9.2903,tape,100 sq ft
+163f18d3ac,bathroom,floor_area,room,2.0439,tape,22 sq ft; walls not taped
+163f18d3ac,passage,wall_length,1,3.3528,tape,11 ft
+163f18d3ac,passage,wall_length,2,0.7620,tape,2.5 ft
+163f18d3ac,passage,wall_length,3,3.3528,tape,11 ft
+163f18d3ac,passage,wall_length,4,0.7620,tape,2.5 ft
+163f18d3ac,passage,floor_area,room,2.5548,tape,2.5 x 11 ft
+163f18d3ac,hall,adjacency,passage,1,tape,same as ae3edc814d
+163f18d3ac,passage,adjacency,bedroom,1,tape,same as ae3edc814d
+163f18d3ac,hall,adjacency,bathroom,1,tape,same as ae3edc814d
+163f18d3ac,passage,adjacency,bathroom,1,tape,same as ae3edc814d
+163f18d3ac,,footprint_area,property,28.7535,tape,same four rooms

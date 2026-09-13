@@ -12,6 +12,9 @@ data/captures/*
 weights/*
 !weights/.gitkeep
 reports/
+!reports/verified/
+!reports/verified/**
+out/
 *.zip
 *.mp4
 *.ply

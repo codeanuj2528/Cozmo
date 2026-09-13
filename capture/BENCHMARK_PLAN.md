@@ -65,6 +65,6 @@ Property level:
 ## After capturing
 
 ```bash
-cozmo ingest <folder> --capture-id apt_multi --tier lidar
-cozmo bench --ground-truth capture/ground_truth.csv --out reports/benchmark
+.venv/bin/python -m cozmo.cli run --input <folder> --out runs/apt_multi
+.venv/bin/python -m cozmo.cli benchmark --runs runs --ground-truth capture/ground_truth.csv --out reports/benchmark
 ```

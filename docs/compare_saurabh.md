@@ -21,7 +21,20 @@ His own report says this out loud: *"the LiDAR tier emits exactly one room per c
 
 ---
 
-## Where he is ahead (steal the idea, do not copy the repo)
+## Integrated from his ideas (13 Sep 2026, not a copy of his repo)
+
+| Idea | Where it lives now | What we did not take |
+|---|---|---|
+| Ray-traced 3.60×2.80×2.50 box | `tests/fixtures/raytrace_room.py`, `tests/test_synthetic_lidar.py` | His 2.44 m ceiling prior when the up-lap is missing |
+| `scripts/setup.sh` + smoke test | `scripts/setup.sh` | His VGGT / LightGlue / 5 GB photo stack |
+| Photo/video intervals ±60% | `uncertainty/calibration.py` `THIN_TIER_RELATIVE_FLOOR` | Narrow propagated sigmas pretending to be a survey |
+| Stitch when doorways are missing | `stitch/rooms.py` `folder_name_pairs` — hall/passage as connector | DINOv2 + SuperPoint+LightGlue matcher |
+
+His 0.1 cm wall error remains a unit-test number on a ray-traced box. Ours will be the same class of number. It is not a laser on a real flat.
+
+---
+
+## Where he is ahead (remaining, do not copy the repo)
 
 | Item | Him | Us | What to do |
 |---|---|---|---|
@@ -43,7 +56,7 @@ His 0.1 cm wall error is on a **ray-traced box**, not a real room. That is a val
 | Multi-room LiDAR (the product surface) | 3 and 5 rooms, adjacencies geometrically closed | 1 room per capture, always |
 | Unmeasured ceiling | `null`, renderer says "unmeasured" | 2.44 m prior on every photo/video and on floor-only LiDAR |
 | Negative intervals | Clamped; 0 on the verified runs | ci_95 can still look like a measurement of a prior |
-| Drift ablation on a long walk | 18.57 → 27.20 m² on `163f18d3ac`, four-way table regenerable from CLI | Ablation field exists; LiDAR still one polygon |
+| Drift ablation on a long walk | Four-way CLI table on `163f18d3ac`; verified merged plan is **5 rooms / 25.25 m²**. The 27.20 m² row is the pre-merge ablation, still regenerable | Ablation field exists; LiDAR still one polygon |
 | Same sample zip, single room | 17.36 m², 1 room | 17.82 m², 1 room — essentially the same number |
 
 ---

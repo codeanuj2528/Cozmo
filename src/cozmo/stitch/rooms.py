@@ -37,6 +37,11 @@ MIN_MATCH_SCORE = 0.35
 OVERLAP_TOLERANCE_M2 = 0.25
 UNPLACED_GAP_M = 1.5
 CONNECTING_TYPES = (OpeningType.DOOR, OpeningType.PASS_THROUGH)
+# Folder names the brief treats as the connector between rooms. Used only when
+# doorway matching has nothing to work with — the photo tier often detects
+# zero openings. This is name evidence, not a measured doorway, and the
+# adjacency records that.
+CONNECTOR_LABELS = frozenset({"hall", "hallway", "passage", "corridor", "landing"})
 
 
 @dataclass
@@ -233,15 +238,113 @@ def stitch_property(rooms: list[Room]) -> tuple[list[Room], list[Adjacency], lis
         )
 
     if remaining:
-        warnings.append(
-            f"{len(remaining)} room(s) could not be joined to the property through a "
-            f"doorway and are placed alongside it, unconnected: {', '.join(sorted(remaining))}"
+        inferred, infer_warnings = _place_by_folder_names(
+            remaining, by_id, placed, rooms
         )
-        for room_id in sorted(remaining):
-            placed[room_id] = _place_alongside(by_id[room_id], placed.values())
+        warnings.extend(infer_warnings)
+        adjacency.extend(inferred)
+        still = {rid for rid in remaining if rid not in placed}
+        if still:
+            warnings.append(
+                f"{len(still)} room(s) could not be joined to the property through a "
+                f"doorway or a named connector and are placed alongside it, unconnected: "
+                f"{', '.join(sorted(still))}"
+            )
+            for room_id in sorted(still):
+                placed[room_id] = _place_alongside(by_id[room_id], placed.values())
 
     ordered = [placed[r.room_id] for r in rooms]
     return ordered, adjacency, warnings
+
+
+def folder_name_pairs(rooms: list[Room]) -> list[tuple[str, str]]:
+    """Which rooms a folder name says should touch.
+
+    A hall / passage / corridor connects to every other named room. Without a
+    connector, consecutive folders in capture order are the weaker fallback
+    the public submission uses when visual doorway matches fail.
+    """
+    labels = [(room.room_id, (room.label or room.room_id).strip().lower()) for room in rooms]
+    connectors = [rid for rid, label in labels if label in CONNECTOR_LABELS]
+    others = [rid for rid, label in labels if label not in CONNECTOR_LABELS]
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(a: str, b: str) -> None:
+        if a == b:
+            return
+        key = (a, b) if a < b else (b, a)
+        if key not in seen:
+            seen.add(key)
+            pairs.append((a, b))
+
+    if connectors:
+        for connector in connectors:
+            for other in others:
+                add(connector, other)
+        for left, right in zip(connectors, connectors[1:]):
+            add(left, right)
+        return pairs
+    for left, right in zip([rid for rid, _ in labels], [rid for rid, _ in labels][1:]):
+        add(left, right)
+    return pairs
+
+
+def _place_by_folder_names(
+    remaining: set[str],
+    by_id: dict[str, Room],
+    placed: dict[str, Room],
+    all_rooms: list[Room],
+) -> tuple[list[Adjacency], list[str]]:
+    """Slide leftover rooms against a named connector and declare the join."""
+    adjacency: list[Adjacency] = []
+    warnings: list[str] = []
+    pairs = folder_name_pairs(all_rooms)
+    pending = set(remaining)
+    progressed = True
+    while pending and progressed:
+        progressed = False
+        for room_a, room_b in pairs:
+            if room_a in placed and room_b in pending:
+                fixed_id, moving_id = room_a, room_b
+            elif room_b in placed and room_a in pending:
+                fixed_id, moving_id = room_b, room_a
+            else:
+                continue
+            placed[moving_id] = _place_touching(by_id[moving_id], placed[fixed_id], placed.values())
+            pending.discard(moving_id)
+            progressed = True
+            adjacency.append(
+                Adjacency(
+                    room_a=fixed_id,
+                    room_b=moving_id,
+                    opening_a="",
+                    opening_b=None,
+                    confidence=0.15,
+                    evidence=(
+                        "folder-name connector: no doorway was observed on both sides; "
+                        f"{by_id[moving_id].label} placed against {by_id[fixed_id].label}"
+                    ),
+                )
+            )
+            warnings.append(
+                f"{moving_id} joined to {fixed_id} from folder names only; "
+                "the doorway itself was not measured"
+            )
+    remaining.clear()
+    remaining.update(pending)
+    return adjacency, warnings
+
+
+def _place_touching(room: Room, neighbour: Room, others) -> Room:
+    """Put `room` on the neighbour's right edge, then push clear of overlaps."""
+    own = _polygon(room)
+    other = _polygon(neighbour)
+    if own.is_empty or other.is_empty:
+        return _place_alongside(room, others)
+    shift = np.array([other.bounds[2] - own.bounds[0], other.bounds[1] - own.bounds[1]])
+    moved = transform_room(room, 0.0, shift)
+    return _push_clear(moved, [o for o in others if o.room_id != room.room_id], np.array([-1.0, 0.0]))
 
 
 def _polygon(room: Room) -> Polygon:

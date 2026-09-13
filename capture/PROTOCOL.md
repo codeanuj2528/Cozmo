@@ -109,10 +109,11 @@ them to appear on the plan.
 Copy the folders onto the machine and run one command per capture:
 
 ```bash
-cozmo run <path-to-capture> --tier lidar --out runs/my_capture
+.venv/bin/python -m cozmo.cli run --input <path-to-capture> --out runs/my_capture
 ```
 
-`--tier video` and `--tier photo` take the `.MOV` and the folder-of-folders respectively.
+The tier is detected from the folder (odometry.csv → LiDAR, a video file → video,
+per-room stills → photo). There is no `--tier` flag.
 
 ## What makes a capture fail
 

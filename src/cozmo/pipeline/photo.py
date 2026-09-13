@@ -111,7 +111,7 @@ def build_room_frames(
     backbone,
     config: PipelineConfig,
     fallback_scale: float | None = None,
-) -> tuple[list[Frame], dict[int, np.ndarray], list[str], list[str]]:
+) -> tuple[list[Frame], dict[int, np.ndarray], list[str], list[str], float | None]:
     """Depth, level, scale and register one room's stills into posed frames."""
     warnings: list[str] = []
     scale_sources: list[str] = []
@@ -122,7 +122,7 @@ def build_room_frames(
         if prepared is not None:
             loaded.append((path, prepared[0], prepared[1]))
     if not loaded:
-        return [], {}, [], ["no readable images"]
+        return [], {}, [], ["no readable images"], None
 
     if len(loaded) > MAX_IMAGES_PER_ROOM:
         keep = select_diverse_frames([small for _, _, small in loaded], MAX_IMAGES_PER_ROOM)
@@ -159,7 +159,7 @@ def build_room_frames(
         )
 
     if not pending:
-        return [], {}, scale_sources, warnings + ["no image produced usable geometry"]
+        return [], {}, scale_sources, warnings + ["no image produced usable geometry"], None
 
     # One room has one scale. Most photographs of a room do not show enough floor for the
     # camera-height prior to fire -- on the benchmark set it fires on three photographs in
@@ -215,7 +215,7 @@ def build_room_frames(
         )
 
     if not clouds:
-        return [], {}, scale_sources, warnings + ["no image produced usable geometry"]
+        return [], {}, scale_sources, warnings + ["no image produced usable geometry"], None
 
     registration = register_room(clouds, floor_y=0.0)
     if registration.failed:
@@ -254,7 +254,7 @@ def build_room_frames(
         )
         images[index] = meta["small"]
 
-    return frames, images, scale_sources, warnings
+    return frames, images, scale_sources, warnings, room_scale
 
 
 def _cloud_from_depth(
@@ -335,29 +335,23 @@ def build_photo_plan(
 
     reconstructions: list[RoomReconstruction] = []
     all_scale_sources: list[str] = []
-    property_scales: list[float] = []
 
     # First pass: build room frames and collect camera height scales
     room_data = []
     for ordinal, (name, paths) in enumerate(sorted(folders.items()), start=1):
         room_id = f"room_{ordinal:02d}"
-        frames, images, scale_sources, room_warnings = build_room_frames(paths, backbone, config)
+        frames, images, scale_sources, room_warnings, room_scale = build_room_frames(
+            paths, backbone, config
+        )
         all_scale_sources.extend(scale_sources)
-        room_data.append((room_id, name, paths, frames, images, scale_sources, room_warnings))
+        room_data.append(
+            (room_id, name, paths, frames, images, scale_sources, room_warnings, room_scale)
+        )
 
-    # Collect confident property scale consensus from any room that found floor
-    property_scales: list[float] = []
-    for _, _, _, _, _, _, room_warnings in room_data:
-        for w in room_warnings:
-            if "room scale " in w:
-                try:
-                    sc = float(w.split("room scale ")[1].split(" ")[0])
-                    property_scales.append(sc)
-                except Exception:
-                    pass
+    property_scales = [scale for *_, scale in room_data if scale is not None]
     known_property_scale: float | None = float(np.median(property_scales)) if property_scales else None
 
-    for room_id, name, paths, frames, images, scale_sources, room_warnings in room_data:
+    for room_id, name, paths, frames, images, scale_sources, room_warnings, _room_scale in room_data:
         if not frames:
             reconstructions.append(
                 RoomReconstruction(room_id, name, None, 0, 0, scale_sources, room_warnings)
@@ -383,7 +377,7 @@ def build_photo_plan(
 
         # If native room reconstruction failed or was implausible, retry with property scale consensus
         if (reason or not rooms) and known_property_scale is not None:
-            retry_frames, retry_images, retry_sources, retry_warnings = build_room_frames(
+            retry_frames, retry_images, retry_sources, retry_warnings, _retry_scale = build_room_frames(
                 paths, backbone, config, fallback_scale=known_property_scale
             )
             if retry_frames:

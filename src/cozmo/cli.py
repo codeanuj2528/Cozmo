@@ -224,7 +224,10 @@ def benchmark(
 
     results = []
     for name, plan in plans.items():
-        results.extend(score_capture(plan, truth, name))
+        # Tape rows are keyed by the Stray folder id (ae3edc814d), not the
+        # output directory name (multiroom_home). Prefer the plan's capture_id.
+        truth_id = plan.capture_id if plan.capture_id in truth.captures else name
+        results.extend(score_capture(plan, truth, truth_id))
 
     if repeat:
         ids = [part.strip() for part in repeat.split(",") if part.strip()]

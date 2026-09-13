@@ -44,19 +44,27 @@ PRIOR_HALF_WIDTHS: dict[tuple[str, str], float] = {
     ("lidar", "opening_height"): 0.060,
     ("lidar", "sill_height"): 0.060,
     ("lidar", "floor_area"): 0.060,
-    ("video", "wall_length"): 0.060,
-    ("video", "ceiling_height"): 0.070,
-    ("video", "opening_width"): 0.090,
-    ("video", "opening_height"): 0.120,
-    ("video", "sill_height"): 0.120,
-    ("video", "floor_area"): 0.120,
-    ("photo", "wall_length"): 0.140,
-    ("photo", "ceiling_height"): 0.150,
-    ("photo", "opening_width"): 0.180,
-    ("photo", "opening_height"): 0.220,
-    ("photo", "sill_height"): 0.220,
-    ("photo", "floor_area"): 0.280,
+    ("video", "wall_length"): 0.60,
+    ("video", "ceiling_height"): 0.60,
+    ("video", "opening_width"): 0.60,
+    ("video", "opening_height"): 0.60,
+    ("video", "sill_height"): 0.60,
+    ("video", "floor_area"): 0.60,
+    ("photo", "wall_length"): 0.60,
+    ("photo", "ceiling_height"): 0.60,
+    ("photo", "opening_width"): 0.60,
+    ("photo", "opening_height"): 0.60,
+    ("photo", "sill_height"): 0.60,
+    ("photo", "floor_area"): 0.60,
 }
+
+# Photo and video have no metric depth sensor. Their geometry still produces a
+# small propagated sigma, which used to ship as a tight interval around a number
+# that can be wrong by 20x (see the one-room video run). Until a conformal fit
+# exists, every uncalibrated thin-tier interval is at least ±60%. That is the
+# public-submission interval on the same brief, and it is the honest one.
+THIN_TIERS = frozenset({"photo", "video"})
+THIN_TIER_RELATIVE_FLOOR = 0.60
 
 
 @dataclass
@@ -136,6 +144,12 @@ class IntervalBook:
             method = IntervalMethod.PRIOR
 
         half = max(float(half), float(floor_half_width))
+        if (
+            tier_name in THIN_TIERS
+            and method is not IntervalMethod.CONFORMAL
+            and np.isfinite(value)
+        ):
+            half = max(half, THIN_TIER_RELATIVE_FLOOR * abs(float(value)))
 
         # Every quantity in this schema is a length, an area or a height, and none of them
         # can be negative. An interval that runs below zero is not conservative, it is

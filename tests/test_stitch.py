@@ -105,6 +105,26 @@ def test_close_declared_gaps_does_not_reopen_the_first_pair():
     assert pb.distance(pc) < 0.02
 
 
+def test_folder_name_pairs_connect_through_hall():
+    from cozmo.stitch.rooms import folder_name_pairs, stitch_property
+
+    hall = _box_room("room_01", (0.0, 0.0), (3.0, 2.0), 6.0)
+    hall = hall.model_copy(update={"label": "hall"})
+    bath = _box_room("room_02", (10.0, 0.0), (2.0, 2.0), 4.0)
+    bath = bath.model_copy(update={"label": "bathroom"})
+    bed = _box_room("room_03", (20.0, 0.0), (4.0, 3.0), 12.0)
+    bed = bed.model_copy(update={"label": "bedroom"})
+    pairs = folder_name_pairs([hall, bath, bed])
+    assert set(pairs) == {("room_01", "room_02"), ("room_01", "room_03")}
+
+    placed, adjacency, warnings = stitch_property([hall, bath, bed])
+    assert len(adjacency) == 2
+    assert all(adj.confidence == pytest.approx(0.15) for adj in adjacency)
+    assert any("folder-name" in adj.evidence for adj in adjacency)
+    assert {r.room_id for r in placed} == {"room_01", "room_02", "room_03"}
+    assert any("folder names" in w for w in warnings)
+
+
 def test_merge_diagonal_splits_joins_fat_overlap_not_a_thin_wall():
     from shapely.geometry import box
 

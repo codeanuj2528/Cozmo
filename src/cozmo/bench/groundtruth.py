@@ -124,11 +124,14 @@ def resolve_room(plan_room: Room, truth: GroundTruth) -> str | None:
     From the operator's mapping, or from the room's own label when the reconstruction was
     given one. Never guessed from geometry.
     """
+    # A folder name the operator wrote (hall, bedroom, …) is the room. The LiDAR
+    # room_map is only for reconstructions still labelled "room". Checking the map
+    # first would rename a photo-tier bathroom to hall just because both are room_01.
+    if plan_room.label and plan_room.label != "room":
+        return plan_room.label
     mapped = truth.room_map.get(plan_room.room_id)
     if mapped:
         return mapped
-    if plan_room.label and plan_room.label != "room":
-        return plan_room.label
     return None
 
 

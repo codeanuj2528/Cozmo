@@ -1,5 +1,10 @@
 # Audit: real-data accuracy, gate status, and the fix plan
 
+**Superseded headline numbers (12 Sep eval_*).** Current verified runs are in
+`docs/verified_lidar.md`: `c00a170fe1` is **1 room / 17.36 m²** (not 2);
+`163f18d3ac` is **5 rooms / 25.25 m² / 7 openings** (not 6 / 27.20 / 10);
+`ae3edc814d` 3 / 16.69 is unchanged. Do not submit `reports/eval_*`.
+
 Every number in this document was produced by a command in this repository on capture data
 that exists on disk, on 12 Sep 2026. Commands are given so each one can be re-run. Where a
 gate cannot be scored, it says so and says what is missing rather than estimating.
