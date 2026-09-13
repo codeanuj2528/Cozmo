@@ -92,7 +92,7 @@ the four-way ablation is, all four rows regenerable from the CLI:
 | drift on, snap on | 6 | 27.20 m² | 0.721 | 0.00° |
 
 These four rows are the **pre-merge** ablation (regenerable from CLI flags). After
-split-room merge the same capture is **5 rooms / 25.27 m²** (`docs/verified_lidar.md`).
+split-room merge the same capture is **5 rooms / 25.27 m²** (`reports/verified/README.md`).
 Do not quote 27.20 as the current plan.
 
 ## 6. A room the operator did not walk into is not reported

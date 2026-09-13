@@ -270,8 +270,9 @@ photographed on the 1× lens, the hall reads 35.12 m² against 14.86 m², down f
 at 0.5×. The assignment's two scans of one flat, which has no tape, give 35.74 m² over 7 rooms
 and 31.57 m² over 6.
 
-`quarantine/README.md` records earlier artefacts that were removed rather than submitted: a
-benchmark over procedurally generated rooms, a head-to-head against an app that was never run,
-and a fix loop whose before and after were byte-identical.
+An earlier generator in this repository produced a benchmark over procedurally generated rooms, a
+head-to-head against an app that was never run, and a fix loop whose before and after were
+byte-identical. Those artefacts were removed before submission; every number in this report comes
+from `reports/verified/`.
 
 Some ideas here came from public work on the same brief: a ray-traced test room, a one-command setup script, a relative floor on photo and video intervals, and stitching rooms by folder name when no doorway is matched.

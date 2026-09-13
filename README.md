@@ -94,7 +94,8 @@ Subfolder names become the room labels on the plan.
 | Architecture and the error budget | `technical_report.md` |
 | What does not work, with numbers | `known_failure_modes.md` |
 | The Part 4 fix loop | `fixloop/` |
-| Artifacts that could not be reproduced | `quarantine/README.md` |
+| The benchmark shot list and how to stage damage | `capture/BENCHMARK_PLAN.md` |
+| Self-consistency checks on any plan, no ground truth needed | `scripts/audit_plans.py` |
 
 ## Layout
 
@@ -111,7 +112,7 @@ src/cozmo/
   scope/           repair line items
   uncertainty/     split-conformal calibration
   render/          plan drawing, SVG and PNG backends
-  bench/           ground truth, gates, structural metrics
+  bench/           ground truth, gates, repeatability
 ```
 
 The design principle worth knowing before reading the code: **a tier's job is to produce
@@ -131,7 +132,7 @@ intervals, and the schema contract. Several exist because a defect got past revi
 ## State of the evidence
 
 Numbers against the operator's tape: `benchmark_report.md`. What to show and what to disclose:
-`SUBMIT.md`. `AUDIT.md` is the 12 Sep self-audit and its figures are superseded.
+`SUBMIT.md`.
 
 | Capture | Tier | Rooms | Area | Show? |
 |---|---|---|---|---|
@@ -148,5 +149,4 @@ Numbers against the operator's tape: `benchmark_report.md`. What to show and wha
 
 **Choose the LiDAR tier for a walk-in.** Against tape the gates read 13 PASS, 19 FAIL, 34 SKIP.
 Ceiling and door rows were never taped, so those gates stay `SKIP`. Room names come from camera
-frames (`capture/room_identity/`), not from area. `quarantine/` is the audit trail of removed
-fakes; do not quote it.
+frames (`capture/room_identity/`), not from area.

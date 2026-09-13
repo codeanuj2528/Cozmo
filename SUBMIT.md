@@ -54,13 +54,6 @@ Round 2: `fixloop/round2/`, declaration `88af4e3` before fix `20cb44a`, with bef
 manifests and gate tables. Index: `fixloop/README.md`. Neither round moved a gate to PASS, and both
 post-mortems say why. The tag `fixloop-before` is off this history; do not check it out.
 
-## The external audit
-
-`docs/external_vision_audit_review.md` answers the "GOT-Vision" executive summary claim by claim.
-Its "no focal-length EXIF", "640×360 video" and "ceiling ground truth 2.60 / 2.55 / 2.50 / 2.45 m"
-findings come from its own script rather than from these captures. Its 2.20 m ceiling sanity bound was right. Adding it exposed that room ceilings were read where a
-fitted plane crosses the world origin rather than over the room; both are fixed in `8aaf149`.
-
 ## Do not invent
 
 - Ceiling heights, door widths, bathroom walls. The tape has none, so those gates stay SKIP. Do not
@@ -84,7 +77,6 @@ fitted plane crosses the world origin rather than over the room; both are fixed 
 
 ## Do not put in the zip
 
-- `quarantine/`, which holds fabricated artefacts kept only as an audit trail
 - `reports/eval_*`, superseded runs
 - the 3.6 GB video
 
