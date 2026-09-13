@@ -205,6 +205,18 @@ rescue it.
 coverage fell from three wrong rooms to one plausible one. By the brief's own rubric that
 earns marks for the post-mortem and none for the prediction, which is correct.
 
+**Round 2, LiDAR, against the operator's tape.** Declared before the fix (`88af4e3`): footprint
+−12% on the long walk and −42% on the first walk, every room short, the bedroom 5.28 m² against
+9.29 m². Hypothesis: the strip between furniture and the wall behind it has no floor evidence, so
+faces there are labelled exterior and rooms end at the wardrobe front; ceiling returns above the
+strip should count as interior evidence. Predicted: a bedroom of 8.0–9.5 m² and a footprint inside
+±5%. **Result: every room polygon identical, on both captures.** The "real walls" 0.23–0.27 m
+beyond the bedroom were the far faces of 230 mm brick partitions, and the ceiling measurement
+behind the prediction had bled into the neighbouring rooms through a morphological closing.
+Diagnosing the non-result found a worse defect: the room map had been assigned by matching areas
+and was wrong on both captures, scoring the long walk's bathroom as the passage and the first
+walk's bedroom as the hall. Rooms are now named from camera frames. No gate moved.
+
 ---
 
 ## 7. Known failure modes
@@ -232,24 +244,29 @@ none.
 **Ceiling height is unmeasurable without the upward lap.** No downward-facing returns, no
 height, by any method. The pipeline reports `unmeasured` rather than substituting a default.
 The company's own `single_room` sample has 61 downward-facing points in the entire scan; the
-author's first capture had 1.4% of frames aimed up and the second had 24.3%, which is the
-difference between no ceiling heights and 1.86–2.63 m per room.
+author's first capture had 1.4% of frames aimed up and the second had 24.3%, and the long walk now
+measures 2.56–2.68 m per room; a window bay that once reported a 1.86 m ceiling, measured
+from its ledge, now abstains. Reading room levels where each fitted plane crosses the world origin
+had put that bay at 3.04 m and moved a passage ceiling by 15 cm. Reading the property-wide levels
+over the floor instead moves the long walk's footprint by 0.76 m², a sensitivity recorded in the
+failure modes rather than shipped.
 
 ---
 
 ## 8. State of the evidence
 
-The LiDAR tier works on `163f18d3ac`, a 96.6 m walk: **5 rooms, 25.25 m²**, per-room ceiling
-heights 1.86–2.63 m, 7 openings, 4 adjacencies at gap 0, 82 s (`docs/verified_lidar.md`).
-An earlier 6-room / 27.20 m² figure on this walk was before split-room merge; do not quote
-it. The benchmark slot holds `ae3edc814d`, a 23.1 m walk giving 3 rooms and 16.69 m².
-`AUDIT.md` carries the measured gate status and the defect register.
+The LiDAR tier is the one to run at a walk-in. On the home flat walked with the ceiling lap and a
+closed loop (`163f18d3ac`) it returns 5 rooms and 25.27 m² against a taped 28.75 m² (−12%), with
+per-room ceilings of 2.56–2.68 m, 7 openings and 3 of 4 taped connections. The hall matches the
+tape to its own precision, 15.8 × 9.6 ft against 16 × 10 ft. The bedroom does not: 5.28 m²
+against 9.29 m², and a second walk of the same room gives 7.03 m², so the defect is in the
+reconstruction, not in the tape.
 
-Ten of fourteen gates report `SKIP`, because laser ground truth for the benchmark property
-has not been recorded. They are not reported as passing, and the marks for those rows are
-lost. `quarantine/README.md` records a set of earlier artifacts — a benchmark over
-procedurally generated rooms whose ground truth was its own generator input, a head-to-head
-against an app that was never run, and a fix loop whose before and after PNGs were
-byte-identical — which were removed rather than submitted.
+Against the tape the gates read 6 PASS, 13 FAIL, 14 SKIP. Ceiling and opening gates are SKIP
+because neither was taped. LiDAR intervals cover the tape on none of 31 measurements: they model
+sensor and drift error, not a merged or a short room. The photo tier fails at +220% and the video
+tier does not produce a metric plan.
 
-That is the honest state of it.
+`quarantine/README.md` records earlier artefacts that were removed rather than submitted: a
+benchmark over procedurally generated rooms, a head-to-head against an app that was never run,
+and a fix loop whose before and after were byte-identical.

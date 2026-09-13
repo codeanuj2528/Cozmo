@@ -1,41 +1,30 @@
 # Verified LiDAR runs
 
-Commands and numbers from 13 Sep 2026. Re-run to regenerate.
+Numbers and the per-room comparison against tape are in `benchmark_report.md`; the run table is
+in `reports/verified/README.md`. This page keeps what those do not.
 
-```bash
-.venv/bin/python -m cozmo.cli run -i ../data/raw/c00a170fe1 -o reports/verified/single_room
-.venv/bin/python -m cozmo.cli run -i ../DROP_CAPTURES_HERE/01_multiroom_lidar/ae3edc814d -o reports/verified/multiroom_home
-.venv/bin/python -m cozmo.cli run -i ../data/raw/163f18d3ac -o reports/verified/multiroom_long
-```
+## Adjacency is closed after translation
 
-| capture | source | rooms | footprint | ceilings | openings | runtime |
-|---|---|---|---|---|---|---|
-| `c00a170fe1` | assignment `single_room.zip` | 1 | 17.36 m² | unmeasured (no upward lap) | 1 | 22 s |
-| `ae3edc814d` | `01_multiroom_lidar` | 3 | 16.69 m² | 2.627 / 2.619 / 2.425 m | 5 | 54 s |
-| `163f18d3ac` | `data/raw` long walk | 5 | 25.25 m² | 2.595 / 2.628 / 2.564 / 1.86 / 2.536 m | 7 | 82 s |
+On the multi-room plans, rooms declared adjacent are translated until they touch, rather than
+observed touching. `quality.warnings` in each `plan.json` records the gap each closure removed.
+The plan then reports those rooms as sharing a wall, and says it did so.
 
-Adjacency on the multi-room plans is **closed after translation**, not observed at zero.
-`ae3edc814d` closed a **0.398 m** gap; `163f18d3ac` closed **0.143 / 0.556 / 0.609 m**.
-The plan then reports those rooms as touching. That is disclosed in `quality.warnings`.
+## Ceilings
 
-The 1.86 m reading is a soffit, not a finished ceiling. **Verified** plans have no negative
-interval `lo`. Older `reports/eval_*` plans do (and `c00a170fe1` there is still 2 rooms with
-`ceiling_height = 0.0`). Do not submit `eval_*` as current.
+A room's ceiling height is read plane to plane over the centre of that room's own floor. Three
+rules decide whether there is a ceiling to read: it is more than 2.20 m above the floor, it is at
+least 20% as strong as the strongest downward-facing surface overhead, and its returns cover at
+least 0.25 m². A room that fails any of them reports its ceiling as unmeasured and says why in
+`quality.warnings`. It never reports 0.0 m, and no interval has a negative lower bound.
 
-## Tape on the home flat (same four rooms)
+On the long walk these rules turn room_04 from a 1.860 m ceiling into an unmeasured one. Its only
+upward surface is a window ledge 0.52 m above the floor: it is a bay, not a room, though the
+pipeline still counts its 2.19 m² in the footprint.
 
-Operator-stated feet, `tool=tape`, in `capture/ground_truth.csv`.
-1 ft = 0.3048 m. Hall 16×10, passage 2.5×11, bedroom 10×10, bathroom 22 sq ft
-only. Adjacency: hall–passage, passage–bedroom, hall–bathroom, passage–bathroom.
+The whole-property floor and ceiling that bound wall voting and occupancy are still read at the
+world origin. Reading them over the floor instead moves the long walk's property ceiling by 2.8 cm
+and its footprint by 0.76 m²; see `known_failure_modes.md` §17.
 
-| | Tape | `ae3edc814d` | `163f18d3ac` |
-|---|---|---|---|
-| Hall | 14.86 m² | 7.15 m² (`room_01`) | 13.18 m² (`room_01`) |
-| Passage | 2.55 m² | 3.50 m² (`room_03`) | 2.62 m² (`room_03`) |
-| Bedroom | 9.29 m² | 6.04 m² (`room_02`) | 5.27 m² (`room_02`) |
-| Bathroom | 2.04 m² | missing | 1.99 m² (`room_05`) |
-| Footprint | 28.75 m² | 16.69 m² **−42% FAIL** | 25.25 m² **−12% FAIL** |
+## Older runs
 
-`c00a170fe1` has no tape (different property). Ceiling and door tape still
-absent — those gates stay SKIP. Photo and video tiers are not in this table;
-video sampling is honest now but the monocular scale path is still the thin-input path.
+`reports/eval_*` predate the split-room merge and the camera-frame room map. Do not quote them.

@@ -13,7 +13,7 @@ These three zips came with the assignment. Both of us ran them.
 
 | Capture | Ours | Saurabh | Who is closer to the brief |
 |---|---|---|---|
-| `c00a170fe1` / `single_room` / his `apartment_lidar` | **1 room, 17.36 m²**, ceiling **unmeasured** | **1 room, 17.82 m²**, ceiling **2.44 m prior** (not measured) | Tie on footprint (~3% apart). We win honesty: we do not invent 2.44 m |
+| `c00a170fe1` / `single_room` / his `apartment_lidar` | **1 room, 17.87 m²**, ceiling **unmeasured** | **1 room, 17.82 m²**, ceiling **2.44 m prior** (not measured) | Tie on footprint (0.3% apart; 17.36 m² before `50d192b` merged a wall step). We win honesty: we do not invent 2.44 m |
 | `1a8384c3f6` / `scan_floor_only` | 7 rooms, 35.90 m² (older run) | **1 room, 51.33 m²**, ceiling 2.44 prior | He collapses a whole flat into one polygon. The brief wants rooms + adjacency. We over-segment; he under-segments |
 | `c7d28f72c6` / `scan_with_ceiling` | 6 rooms, 30.18 m² | **1 room, 39.01 m²**, ceiling **3.07 m measured** | He actually measured a ceiling (40% of points above camera). We split rooms. His 3.07 m is the better ceiling story; his one-room plan fails the multi-room contract |
 
@@ -56,8 +56,8 @@ His 0.1 cm wall error is on a **ray-traced box**, not a real room. That is a val
 | Multi-room LiDAR (the product surface) | 3 and 5 rooms, adjacencies geometrically closed | 1 room per capture, always |
 | Unmeasured ceiling | `null`, renderer says "unmeasured" | 2.44 m prior on every photo/video and on floor-only LiDAR |
 | Negative intervals | Clamped; 0 on the verified runs | ci_95 can still look like a measurement of a prior |
-| Drift ablation on a long walk | Four-way CLI table on `163f18d3ac`; verified merged plan is **5 rooms / 25.25 m²**. The 27.20 m² row is the pre-merge ablation, still regenerable | Ablation field exists; LiDAR still one polygon |
-| Same sample zip, single room | 17.36 m², 1 room | 17.82 m², 1 room — essentially the same number |
+| Drift ablation on a long walk | Four-way CLI table on `163f18d3ac`; verified merged plan is **5 rooms / 25.27 m²**. The 27.20 m² row is the pre-merge ablation, still regenerable | Ablation field exists; LiDAR still one polygon |
+| Same sample zip, single room | 17.87 m², 1 room | 17.82 m², 1 room — essentially the same number |
 
 ---
 

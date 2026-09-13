@@ -2,109 +2,116 @@
 
 Requirement → where it lives → what it produces → status.
 
-`MET` means implemented and demonstrated on real data. `PARTIAL` means implemented and
-falling short, with the shortfall quantified. `NOT MET` means absent. `UNVERIFIED` means
-built and runnable but not yet scored, because the laser ground truth for the benchmark
-property has not been recorded — those rows report `SKIP` in the gate table rather than
-`PASS`.
+- `MET`: implemented and demonstrated on real data.
+- `PARTIAL`: implemented and falling short, with the shortfall quantified.
+- `FAIL`: implemented, measured against ground truth, and the gate is not met.
+- `UNVERIFIED`: implemented, but the ground truth needed to score it does not exist; the gate
+  reports `SKIP`, never `PASS`.
+- `NOT MET`: absent.
 
 ## Part 1 — Capture route and tiers
 
 | # | Requirement | Where | Artifact | Status |
 |---|---|---|---|---|
-| 1.1 | Capture route chosen and documented | `capture/PROTOCOL.md` | One-page stock-capture protocol, Stray Scanner + native Camera | **MET** |
-| 1.2 | Non-engineer can follow it literally | `capture/PROTOCOL.md` | Install table, walk script, failure table, hand-off command | **MET** |
+| 1.1 | Capture route chosen and documented | `capture/PROTOCOL.md` | One-page stock-capture protocol: Stray Scanner and the native Camera | **MET** |
+| 1.2 | A non-engineer can follow it literally | `capture/PROTOCOL.md` | Install table, walk script, failure table, hand-off command | **MET** |
 | 1.3 | Install in under 10 minutes | `capture/PROTOCOL.md` | Two free App Store apps, no sign-in, no provisioning | **MET** |
-| 1.4 | Photo tier — 2 to 8 stills per room, no depth, no poses | `cozmo/io/photo.py`, `cozmo/pipeline/photo.py` | Runs on 58 real stills across 4 rooms | **PARTIAL** — runs, fails its accuracy gate; see 2.14 |
-| 1.5 | Video tier — handheld walkthrough | `cozmo/pipeline/video.py` | Runs; monocular scale not solved. DROP 02 → 1 room ~371 m²; `one_room/video` → 339 m² vs LiDAR 17.36 | **NOT MET** as a metric product |
-| 1.6 | LiDAR tier — depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | 5 rooms, 25.25 m², 7 openings, 4 adjacency on `163f18d3ac` (`docs/verified_lidar.md`). Benchmark slot `ae3edc814d`: 3 rooms, 16.69 m², 5 openings, adj. gaps 0 | **MET** |
-| 1.7 | Device matrix | `capture/DEVICE_MATRIX.md` | Tier availability per device; accuracy cells marked `pending` until measured | **PARTIAL** — matrix present, accuracy cells unfilled pending laser |
+| 1.4 | Photo tier, 2–8 stills per room, no depth or poses | `cozmo/io/photo.py`, `cozmo/pipeline/photo.py` | Runs on 58 real stills in four folders | **PARTIAL**: runs; fails its gate (2.23) |
+| 1.5 | Video tier, handheld walkthrough | `cozmo/pipeline/video.py` | Runs; whole-flat clip gives one room of about 371 m², the 17.87 m² assignment room gives 339.61 m² | **NOT MET** as a metric product |
+| 1.6 | LiDAR tier: depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | Home long walk: 5 rooms, 25.27 m², 7 openings, 3/4 taped connections | **MET** |
+| 1.7 | Device matrix | `capture/DEVICE_MATRIX.md` | Tier availability per device; accuracy cells pending | **PARTIAL** |
 | 1.8 | Same output contract from each tier | `cozmo/schema.py`, `cozmo/pipeline/__init__.py` | One `PropertyPlan`, one `reconstruct`, three builders | **MET** |
-| 1.9 | Intervals widen as sensor data thins | `cozmo/uncertainty/calibration.py` | Per-tier priors; photo-tier walls at ±134 cm on the real capture | **MET** |
+| 1.9 | Intervals widen honestly as data thins | `cozmo/uncertainty/calibration.py` | Photo walls at ±3.0 m on average, but LiDAR intervals cover the tape on 0 of 31 measurements (2.24) | **PARTIAL** |
 
 ## Part 2 — Output contract and gates
 
 | # | Requirement | Where | Artifact | Status |
 |---|---|---|---|---|
-| 2.1 | Dimensioned per-room plan with walls | `cozmo/geometry/assemble.py` | `Room.walls[]`, each with start, end, length, plane, support | **MET** |
-| 2.2 | Ceiling height per room | `cozmo/geometry/levels.py` | Per-room, 1.86–2.63 m on `163f18d3ac`; the 1.86 m is a soffit read as a ceiling. 8 of 24 rooms across all captures publish `0.0 m` rather than abstaining (`AUDIT.md` D1) | **PARTIAL** |
+| 2.1 | Dimensioned per-room plan with walls | `cozmo/geometry/assemble.py` | `Room.walls[]` with start, end, length, plane, support | **MET** |
+| 2.2 | Ceiling height per room | `cozmo/geometry/levels.py` | 2.56–2.68 m per room on the long walk, read over each room's own floor. A ceiling must be over 2.20 m, strong against everything overhead and cover 0.25 m², or the room reports it unmeasured, as the window bay does | **MET** |
 | 2.3 | Floor area and openings | `cozmo/geometry/{cellcomplex,openings}.py` | `Room.floor_area`, `Room.openings[]` | **MET** |
-| 2.4 | Stitched multi-room plan, correct adjacency | `cozmo/geometry/assemble.py`, `cozmo/stitch/rooms.py` | Tape: 4 real edges. Home walk 2/4 (bathroom missing). Long walk 2/4 + 2 phantom | **PARTIAL** at LiDAR; **NOT MET** at photo tier |
-| 2.5 | Per-surface damage regions, class and metric extent | `cozmo/damage/detect.py` | `DamageRegion` with surface_id, class, metric extent | **MET** |
-| 2.6 | Concealed-damage flags with the rule that fired | `cozmo/damage/rules.py` | `ConcealedFlag.rule_text` carries the readable rule | **MET** |
+| 2.4 | Stitched multi-room plan, correct adjacency | `cozmo/geometry/assemble.py`, `cozmo/stitch/rooms.py` | Against 4 taped edges: long walk 3/4 with one untaped extra, first walk 2/4, photo 1/4 | **PARTIAL** |
+| 2.5 | Per-surface damage regions, class and metric extent | `cozmo/damage/detect.py` | `DamageRegion` with surface, class and extent in metres; one 0.08 m² false positive on the damage-free first walk, none on the long walk | **MET** |
+| 2.6 | Concealed-damage flags with the rule that fired | `cozmo/damage/rules.py` | `ConcealedFlag.rule_text` | **MET** |
 | 2.7 | Scope line items keyed to surfaces | `cozmo/scope/generate.py` | `ScopeItem.surface_id`, `driver_damage_ids` | **MET** |
-| 2.8 | Confidence interval on every measurement | `cozmo/schema.py` `Measure` | No code path emits a bare float for a physical quantity | **MET** |
+| 2.8 | A confidence interval on every measurement | `cozmo/schema.py` `Measure` | No code path emits a bare float for a physical quantity | **MET** |
 | 2.9 | One command per capture | `cozmo/cli.py` | `cozmo run --input DIR --out DIR` | **MET** |
 | 2.10 | JSON to the published schema | `cozmo/schema.py` | Pydantic-validated `plan.json` | **MET** |
 | 2.11 | Rendered plan | `cozmo/render/` | `plan.svg` and `plan.png` per run | **MET** |
-| 2.12 | Benchmark: multi-room, 3+ rooms plus connector | `DROP_CAPTURES_HERE/01_multiroom_lidar` | `ae3edc814d` 3 rooms / 16.69 m²; `163f18d3ac` 5 rooms / 25.25 m². Tape footprint 28.75 m² → **FAIL** (−42% / −12%) | **MET** as a capture; **FAIL** vs tape |
-| 2.13 | Benchmark: furnished room, staged damage, two classes | — | — | **NOT MET** — not captured before the deadline |
-| 2.14 | Benchmark: same rooms at all three tiers | `DROP_CAPTURES_HERE/0{1,2,3}_*` | All three captures exist. LiDAR 16.69 m²; photo 60.87 m² (2/4 rooms); video ~371 m² (1 blob) | **MET** as captures; photo and video **FAIL** |
-| 2.15 | Benchmark: one room captured twice, same tier | — | — | **NOT MET** — repeat scan not captured |
-| 2.16 | Laser or tape ground truth on everything | `capture/ground_truth.csv` | Operator tape: walls + area + 4 adjacencies on both home captures. No ceiling, doors, bathroom walls | **PARTIAL** |
-| 2.17 | Raw sensor data submitted | `DROP_CAPTURES_HERE/` | 4,378-frame Stray export in `01_multiroom_lidar`, 58 stills, one walkthrough clip. The 18,649-frame export is `163f18d3ac` and sits in `data/raw/` | **PARTIAL** |
-| 2.18 | Gate: opening widths ≤2 cm on ≥85%, detection scored | `cozmo/bench/gates.py` `gate_opening_widths` | Phantoms and misses both counted in the denominator | **UNVERIFIED** — no door tape |
-| 2.19 | Gate: ceiling height ≤1.5 cm per room | `cozmo/bench/gates.py` `gate_ceiling_height` | Implemented | **UNVERIFIED** |
-| 2.20 | Gate: repeat spread ≤1 cm, and say which failure it is | `cozmo/bench/gates.py` `gate_repeatability` | Bias and spread scored separately | **UNVERIFIED** — needs the repeat capture |
-| 2.21 | Gate: repeatability 1 cm or 0.5% per wall | `cozmo/bench/gates.py` `gate_repeatability` | Cyclic wall pairing | **UNVERIFIED** |
-| 2.22 | Gate: drift accountability with on/off ablation | `cozmo/geometry/drift.py`, `known_failure_modes.md` §5 | Four-way ablation table on the real capture | **MET** |
-| 2.23 | Gate: photo-tier whole-property stitch, ±8% | `cozmo/stitch/rooms.py` | 58 stills / 4 folders → 2 rooms, 60.87 m² vs tape 28.75 (+112%), 1/4 adjacency | **NOT MET** |
-| 2.24 | Calibration scored at every tier | `cozmo/uncertainty/calibration.py`, `cozmo/bench/gates.py` | Split conformal with finite-sample correction; `gate_interval_coverage` | **UNVERIFIED** — fits from residuals, none exist yet |
+| 2.12 | Benchmark: multi-room, 3+ rooms and a connector | `DROP_CAPTURES_HERE/01_multiroom_lidar`, `data/raw/163f18d3ac` | Hall, passage, bedroom, bathroom, walked twice | **MET** |
+| 2.13 | Benchmark: furnished room with staged damage, two classes | — | — | **NOT MET**: not captured |
+| 2.14 | Benchmark: the same rooms at all three tiers | `DROP_CAPTURES_HERE/0{1,2,3}_*` | LiDAR, video and per-room photo folders of the one flat | **MET** as captures; photo and video fail their gates |
+| 2.15 | Benchmark: one room captured twice at the same tier | `ae3edc814d`, `163f18d3ac` | Two LiDAR walks of the same flat, both covering the bedroom | **MET** as a capture; the gate fails (2.21) |
+| 2.16 | Laser or tape ground truth on everything | `capture/ground_truth.csv` | Tape walls, areas and adjacency; no ceilings, doors or bathroom walls | **PARTIAL** |
+| 2.17 | Raw sensor data submitted | `DROP_CAPTURES_HERE/`, `data/raw/` | Two Stray exports, 58 stills, one walkthrough | **PARTIAL**: the 18,649-frame export is outside git |
+| 2.18 | Gate: opening widths ≤2 cm on ≥85%, detection scored | `cozmo/bench/gates.py` `gate_opening_widths` | Misses and phantoms both counted | **UNVERIFIED**: no door tape |
+| 2.19 | Gate: ceiling height ≤1.5 cm per room | `cozmo/bench/gates.py` `gate_ceiling_height` | Implemented | **UNVERIFIED**: no ceiling tape |
+| 2.20 | Gate: repeat ceiling spread ≤1 cm, and say which failure | `cozmo/bench/gates.py` `gate_repeatability`, `benchmark_report.md` | Bedroom 0.4 cm, hall 0.8 cm, passage 27.5 cm; unrepeatable where segmentation differs | **FAIL** |
+| 2.21 | Gate: repeatability 1 cm or 0.5% per wall | `cozmo/bench/gates.py` `gate_repeatability` | 0/25 walls agree; the same bedroom differs by 0.31 and 0.61 m | **FAIL** |
+| 2.22 | Gate: drift accountability with an on/off ablation | `cozmo/geometry/drift.py`, `known_failure_modes.md` §5 | Pose graph with ICP-verified closures; four-way ablation | **MET** |
+| 2.23 | Gate: photo-tier whole-property stitch, ±8% | `cozmo/stitch/rooms.py` | 3 rooms, 92.00 m² against 28.75 m² (+220%), adjacency 2/4 from folder names | **FAIL** |
+| 2.24 | Calibration scored at every tier | `cozmo/uncertainty/calibration.py`, `gate_interval_coverage` | LiDAR covers 0/16 and 0/15; photo 7/11; not fitted in-sample | **FAIL** |
 
 ## Part 3 — Head-to-head
 
 | # | Requirement | Where | Artifact | Status |
 |---|---|---|---|---|
-| 3.1 | Compare against one consumer app on 2 rooms | — | — | **NOT MET** — competitor export not captured |
-| 3.2 | Name the app and version, submit its export | `DROP_CAPTURES_HERE/08_competitor_export` | Folder prepared, empty | **NOT MET** |
-| 3.3 | Beat or tie on ≥70% of shared dimensions | `cozmo/bench/headtohead.py` | Comparison harness present, no data | **NOT MET** |
+| 3.1 | Compare against one consumer app on 2 rooms | — | — | **NOT MET**: no export captured |
+| 3.2 | Name the app and version, submit its export | `DROP_CAPTURES_HERE/08_competitor_export` | Empty | **NOT MET** |
+| 3.3 | Beat or tie on ≥70% of shared dimensions | `cozmo/bench/headtohead.py` | Harness present, no data | **NOT MET** |
 
 ## Part 4 — Fix loop
 
 | # | Requirement | Where | Artifact | Status |
 |---|---|---|---|---|
-| 4.1 | Worst gate named with its failing number | `fixloop/FIX_DECLARATION.md` §1 | Photo-tier footprint, +422% | **MET** |
-| 4.2 | Root-cause hypothesis with evidence | `fixloop/FIX_DECLARATION.md` §2 | EXIF sub-IFD; fx 4125.3 vs 2221.3 | **MET** |
-| 4.3 | Predicted number, stated before the fix | `fixloop/FIX_DECLARATION.md` §3 | Predicted <+50%; committed before the fix commit | **MET** |
-| 4.4 | Fix shipped | `cozmo/recon/monocular.py`, `cozmo/pipeline/photo.py` | Four changes, in the commit after the declaration | **MET** |
-| 4.5 | Before and after, both regenerable | `fixloop/before/`, `fixloop/after/` | JSON/PNG committed (142.03 → 17.37 m²). Re-run needs `../DROP_CAPTURES_HERE/03_multiroom_photos` (not in git). No `run_manifest.json` / `fixloop/gates/` | **PARTIAL** |
-| 4.6 | Readable diff | `git diff d15c21b..80c44f3` | Tag `fixloop-before` is **orphaned** after a history rewrite; do not diff it against HEAD | **PARTIAL** |
-| 4.7 | Gate moves fail → pass | — | +422% → −36%. Large movement, gate not passed | **PARTIAL** |
-| 4.8 | Post-mortem where the prediction was wrong | `fixloop/POSTMORTEM.md` | Prediction wrong in direction; why, and the real cause measured two ways | **MET** |
+| 4.1 | Round 1: worst gate with its failing number | `fixloop/FIX_DECLARATION.md` | Photo footprint +422% | **MET** |
+| 4.2 | Round 1: root cause with evidence | `fixloop/FIX_DECLARATION.md` | EXIF sub-IFD; fx 4125.3 against 2221.3 | **MET** |
+| 4.3 | Round 1: prediction before the fix | `fixloop/FIX_DECLARATION.md` | Under +50%, committed in `d15c21b` before `80c44f3` | **MET** |
+| 4.4 | Round 1: fix shipped | `cozmo/recon/monocular.py`, `cozmo/pipeline/photo.py` | Four changes | **MET** |
+| 4.5 | Round 1: before and after, regenerable | `fixloop/before/`, `fixloop/after/` | Plans committed; no run manifests; re-run needs the DROP photos | **PARTIAL** |
+| 4.6 | Round 1: readable diff | `git diff d15c21b..80c44f3` | Diff works; the `fixloop-before` tag is off this history | **PARTIAL** |
+| 4.7 | Round 1: gate moves fail to pass | — | +422% to −36%; not a pass | **PARTIAL** |
+| 4.8 | Round 1: post-mortem | `fixloop/POSTMORTEM.md` | Prediction wrong in direction, and why | **MET** |
+| 4.9 | Round 2: declaration before the fix | `fixloop/round2/FIX_DECLARATION.md` | LiDAR footprint against tape; committed `88af4e3` before `20cb44a` | **MET** |
+| 4.10 | Round 2: fix shipped | `cozmo/geometry/{occupancy,cellcomplex}.py`, `tests/test_ceiling_evidence.py` | Ceiling returns as interior evidence | **MET** |
+| 4.11 | Round 2: before and after, regenerable | `fixloop/round2/{before,after,gates}` | Plans, run manifests and gate tables for both captures | **MET** |
+| 4.12 | Round 2: gate moves | `fixloop/round2/gates/` | Before and after identical | **FAIL** |
+| 4.13 | Round 2: post-mortem | `fixloop/round2/POSTMORTEM.md` | Hypothesis refuted by measurement; the room-map defect found and fixed in `e4a4ece` | **MET** |
 
 ## Part 5 — Process evidence
 
 | # | Requirement | Where | Artifact | Status |
 |---|---|---|---|---|
-| 5.1 | Commit as you work, auditable history | `git log` | Incremental commits, each with the defect it fixed and the number it moved | **MET** |
-| 5.2 | Not a single-commit dump | `git log` | Work committed across the build, declaration committed before its fix | **MET** |
+| 5.1 | Commit as you work | `git log` | Incremental commits naming the defect and the number it moved | **MET** |
+| 5.2 | Not a single-commit dump | `git log` | Declarations committed before their fixes, twice | **MET** |
 
 ## Deliverables
 
 | # | Requirement | Where | Status |
 |---|---|---|---|
 | D1 | Compliance matrix | this file | **MET** |
-| D2 | Capture route + device matrix | `capture/PROTOCOL.md`, `capture/DEVICE_MATRIX.md` | **MET** |
-| D3 | Repo, README to running in 15 min, one command per capture | `README.md` | **MET** |
-| D4 | Reproduction bundle | `run_manifest.json` per run: git commit, input hash, config, timings | **MET** |
-| D5 | Benchmark report across three tiers | `AUDIT.md` Part C | **PARTIAL** — of 13 gate rows, 4 are measurable without ground truth: drift accountability passes on a real two-run ablation, room overlap passes vacuously, and repeatability plus the photo stitch fail. The rest are UNMEASURABLE for want of a laser sheet |
-| D6 | Fix loop bundle | `fixloop/` | **MET** |
-| D7 | Technical report, max 6 pages | `technical_report.md` | **MET** |
-| D8 | Raw benchmark data | `DROP_CAPTURES_HERE/` | **PARTIAL** — captures yes, ground truth no |
+| D2 | Capture route and device matrix | `capture/PROTOCOL.md`, `capture/DEVICE_MATRIX.md` | **MET** |
+| D3 | README to running in 15 minutes, one command per capture | `README.md`, `scripts/setup.sh` | **MET** |
+| D4 | Reproduction bundle | `run_manifest.json` per run: commit, input hash, config, timings | **MET** |
+| D5 | Benchmark report across three tiers | `benchmark_report.md`, `reports/verified/gates/` | **PARTIAL**: 6 PASS, 13 FAIL, 14 SKIP |
+| D6 | Fix loop bundle | `fixloop/`, index `fixloop/README.md` | **MET** |
+| D7 | Technical report, at most 6 pages | `technical_report.md` | **MET** |
+| D8 | Raw benchmark data: sensor logs, ground truth, app exports | `DROP_CAPTURES_HERE/`, `capture/` | **PARTIAL**: no app export, partial tape |
 | D9 | Weights fetched by script | `scripts/fetch_weights.sh` | **MET** |
-| D10 | Runs without calling our infrastructure | no network at run time; `scripts/fetch_weights.sh` is the only fetch | **MET** |
-| D11 | Mirrors, glass, wet-look, low light covered | `known_failure_modes.md` §4 | **MET** |
+| D10 | Runs without calling our infrastructure | no network at run time | **MET** |
+| D11 | Mirrors, glass, wet-look surfaces, low light | `known_failure_modes.md` §4 | **MET** |
 
 ## Summary
 
 | status | count |
 |---|---|
-| MET | 38 |
-| PARTIAL | 7 |
-| UNVERIFIED (built, needs ground truth) | 5 |
-| NOT MET | 7 |
+| MET | 39 |
+| PARTIAL | 11 |
+| FAIL | 5 |
+| UNVERIFIED | 2 |
+| NOT MET | 5 |
 
-Every `NOT MET` except 2.23 is a missing capture rather than missing code: the staged-damage
-room, the repeat scan, the competitor export and the laser measurements. The harness for each
-is built and will score them as soon as the data exists. 2.23, the photo-tier stitch, is a
-genuine engineering shortfall and is written up as one in `known_failure_modes.md` §1–2.
+Of the five `NOT MET`, four are missing captures rather than missing code: the staged-damage room
+and the three head-to-head rows. The fifth is the video tier, which runs but does not produce a
+metric plan. The five `FAIL` are measured shortfalls, each explained in `benchmark_report.md` or a
+post-mortem.

@@ -1,5 +1,12 @@
 # Audit: real-data accuracy, gate status, and the fix plan
 
+**Superseded, 13 Sep 2026.** This is the 12 Sep self-audit. Its room assignments came from a map
+built by matching areas, which was wrong on both home captures; its per-room figures that name
+`room_03` passage, `room_05` bathroom, or the first walk's `room_01` hall are superseded. Current
+numbers against tape: `benchmark_report.md`. Current plans: `reports/verified/`, with the long walk
+at 5 rooms and 25.27 m², the first walk at 3 rooms and 16.57 m², and the assignment zip at 1 room and
+17.87 m².
+
 **Superseded headline numbers (12 Sep eval_*).** Current verified runs are in
 `docs/verified_lidar.md`: `c00a170fe1` is **1 room / 17.36 m²** (not 2);
 `163f18d3ac` is **5 rooms / 25.25 m² / 7 openings** (not 6 / 27.20 / 10);
@@ -204,10 +211,10 @@ reproduces all four rows exactly, on `163f18d3ac`, 96.6 m walk:
 
 | variant | rooms | footprint | claimed in report | command |
 |---|---|---|---|---|
-| drift off, snap off | 6 | 21.16 m² | 21.16 m² ✓ | `--no-drift-correction --no-snap-walls` |
-| drift off, snap on | 5 | 18.57 m² | 18.57 m² ✓ | `--no-drift-correction` |
-| drift on, snap off | 6 | 27.97 m² | 27.97 m² ✓ | `--no-snap-walls` |
-| **drift on, snap on** | **6** | **27.20 m²** | 27.20 m² ✓ | defaults |
+| drift off, snap off | 6 | 21.16 m² | 21.16 m², reproduced | `--no-drift-correction --no-snap-walls` |
+| drift off, snap on | 5 | 18.57 m² | 18.57 m², reproduced | `--no-drift-correction` |
+| drift on, snap off | 6 | 27.97 m² | 27.97 m², reproduced | `--no-snap-walls` |
+| **drift on, snap on** | **6** | **27.20 m²** | 27.20 m², reproduced | defaults |
 
 Both axes earn their place: the pose graph is worth +46.5% of the footprint against poses used
 as-is (18.57 → 27.20 m²), and wall snapping costs 0.77 m² while removing the room-frame

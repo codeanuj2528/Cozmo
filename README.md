@@ -22,8 +22,8 @@ Weights stay opt-in: LiDAR is pure geometry. Photo/video also need `.[ml]` befor
 **Try it now (no capture required):** after setup, open the plans we already ran.
 
 ```bash
-open reports/verified/single_room/plan.png      # 1 room, 17.36 m², assignment zip
-open reports/verified/multiroom_home/plan.png   # 3 rooms, 16.69 m² — the product
+open reports/verified/single_room/plan.png      # 1 room, 17.87 m², assignment zip
+open reports/verified/multiroom_long/plan.png   # 5 rooms, 25.27 m² against a taped 28.75 m²
 ```
 
 Then, one command per new capture:
@@ -125,27 +125,24 @@ you are looking for a tier-specific bug, it is almost certainly in the front hal
 .venv/bin/python -m pytest tests/ -q
 ```
 
-50 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
+66 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
 intervals, and the schema contract. Several exist because a defect got past review.
 
 ## State of the evidence
 
-Current numbers: `docs/verified_lidar.md` and `SUBMIT.md`. `AUDIT.md` is the 12 Sep
-self-audit; its 6-room / 27.20 m² / 2-room `c00a170fe1` lines are **pre-merge** and
-superseded.
+Numbers against the operator's tape: `benchmark_report.md`. What to show and what to disclose:
+`SUBMIT.md`. `AUDIT.md` is the 12 Sep self-audit and its figures are superseded.
 
-| Capture | Rooms | Area | Show? |
-|---|---|---|---|
-| `c00a170fe1` | **1** | **17.36 m²** | yes — walk-in |
-| `ae3edc814d` | **3** | **16.69 m²** | yes — stitched home |
-| `163f18d3ac` | **5** | **25.25 m²** | yes — long walk |
-| same-room video | 2 | 339.61 m² | disclose fail |
-| home walkthrough video | 1 | ~371 m² | disclose fail; do not lead |
-| bathroom 0.5× photos | 0 | 0.00 m² | bathroom-only, not the 4-folder run |
-| home 4-folder photos | 2 | 60.87 m² | disclose fail vs tape 28.75 |
+| Capture | Tier | Rooms | Area | Show? |
+|---|---|---|---|---|
+| `163f18d3ac`, home, protocol followed | LiDAR | 5 | 25.27 m², tape 28.75 | yes, lead with it |
+| `c00a170fe1`, assignment zip | LiDAR | 1 | 17.87 m² | yes |
+| `ae3edc814d`, home, no ceiling lap | LiDAR | 3 | 16.57 m², tape 28.75 | beside the long walk |
+| home, 58 stills at 0.5× | photo | 3 | 92.00 m² | disclose the fail |
+| same room as the assignment zip | video | 2 | 339.61 m² | disclose the fail |
+| home walkthrough | video | 1 | about 371 m² | disclose; do not lead |
 
-**Choose the LiDAR tier for walk-in.** Photo stills on disk are 0.5× ultra-wide; video
-scale is not metric. Home tape is in `capture/ground_truth.csv` (`tool=tape`):
-footprint gates **FAIL** (16.69 / 25.25 vs 28.75 m²). Ceiling and door rows are
-still empty, so those gates stay `SKIP`. `quarantine/` is the audit trail of
-removed fakes — do not quote it.
+**Choose the LiDAR tier for a walk-in.** Against tape the gates read 6 PASS, 13 FAIL, 14 SKIP.
+Ceiling and door rows were never taped, so those gates stay `SKIP`. Room names come from camera
+frames (`capture/room_identity/`), not from area. `quarantine/` is the audit trail of removed
+fakes; do not quote it.

@@ -1,17 +1,15 @@
 # What to submit, and what to show
 
-Verified by opening the `plan.json` / `plan.png` files, not by memory.
-`reports/` was gitignored; `reports/verified/` is now tracked so the examiner
-sees the same plans.
+13 Sep 2026. Every number here was read from a committed `plan.json`, `run_manifest.json` or
+gate table.
 
-## Show these (walk-in)
+## Lead the walk-in with LiDAR
 
-| File | Why |
+| File | What it shows |
 |---|---|
-| `reports/verified/single_room/plan.png` | Assignment `c00a170fe1`. **1 room, 17.36 m²**, 1 opening, ceiling honestly unmeasured. Same zip Saurabh reports as 17.82 m². |
-| `reports/verified/multiroom_home/plan.png` | Home Stray `ae3edc814d`. **3 rooms, 16.69 m²**, ceilings 2.63 / 2.62 / 2.43 m, gaps 0. He emits one room per capture. |
-| `reports/verified/multiroom_long/plan.png` | Long walk `163f18d3ac`. **5 rooms, 25.25 m²**. |
-| `scripts/setup.sh` | 15 min: venv + ray-traced **3.60×2.80×2.50** box → ~10.08 m², ceiling 2.50 m. |
+| `reports/verified/multiroom_long/plan.png` | The home flat, protocol followed. 5 rooms, 25.27 m² against a taped 28.75 m² (−12%). The hall reconstructs at 15.8 × 9.6 ft against a taped 16 × 10 ft. |
+| `reports/verified/single_room/plan.png` | The assignment's `single_room.zip`. 1 room, 17.87 m², one opening, ceiling unmeasured because that capture has no upward lap. |
+| `reports/verified/multiroom_home/plan.png` | The same flat on a first walk with the ceiling lap skipped. 3 rooms, 16.57 m² (−42%). Worth showing beside the long walk: it is why the protocol makes the ceiling lap mandatory. |
 
 Examiner command after `scripts/setup.sh`:
 
@@ -19,66 +17,71 @@ Examiner command after `scripts/setup.sh`:
 .venv/bin/python -m cozmo.cli run -i <stray-folder> -o runs/demo
 ```
 
-## Disclose, do not lead with
+## Disclose; do not lead
 
-| File | Why |
+| File | Result |
 |---|---|
-| `reports/verified/multiroom_photos/plan.png` | **Photo benchmark (DROP 03).** 58 stills, 4 folders. **2/4 rooms, 60.87 m²** vs tape 28.75 (+112%). Hall rejected 71.8 m²; bathroom `no_room`. Submit with these warnings; do not lead. |
-| `reports/verified/one_room/photo/plan.png` | Bathroom-only 7 stills → **0 rooms**. Not the 4-folder benchmark. |
-| `reports/verified/one_room/video/plan.png` | Same apartment room as LiDAR 17.36 m² → **339 m² / 2 rooms**. Scale failed. |
-| DROP `02_multiroom_video` | Whole-flat clip: current-code run is **1 room ~371 m²**, 0 adjacency, coverage ~0.002. **Do not lead with that plan.** Same scale failure as `one_room/video`. |
-| `reports/eval_1a8384c3f6/` | Over-segmented older floor-only zip. Prefer verified multi-room. |
-| `quarantine/` | Fabricated suite. Keep in repo as the audit trail. **Do not quote its numbers.** |
+| `reports/verified/multiroom_photos/plan.png` | Photo tier, 58 stills on 0.5×. 3 rooms, 92.00 m² (+220%). FAIL. |
+| `reports/verified/one_room/video/plan.png` | Video tier on the room LiDAR puts at 17.87 m²: 339.61 m². Scale failed. |
+| `reports/verified/one_room/photo/plan.png` | Bathroom stills only: no room recovered. |
+| DROP `02_multiroom_video` | Whole-flat video: one room of about 371 m². Not in the repository. |
 
-## Fix loop (examiner)
+## Accuracy against tape
 
-Committed: `fixloop/before/plan.json` **142.03 m²** → `after/plan.json` **17.37 m²**.
-Gate ±8% still **FAIL**. Readable diff: `git diff d15c21b..80c44f3`.
-Do **not** `git checkout fixloop-before` — that tag is off this graph.
+Full detail in `benchmark_report.md`. Gates: **6 PASS, 13 FAIL, 14 SKIP**
+(`reports/verified/gates/gate_table.txt`). Footprint, walls, interval coverage, adjacency and
+repeatability fail, and the report says why for each.
 
-## Tape (filled, 13 Sep 2026)
+**Room names come from the camera, not from area.** `capture/room_map.json` names each
+reconstructed room from frames taken inside it, saved in `capture/room_identity/`. The previous
+map was assigned by area and was wrong on both captures. Those frames show the inside of your
+home: delete the folder if you would rather not publish it, and the map's `_evidence` block still
+cites the frame numbers.
 
-Operator feet in `capture/ground_truth.csv`, `tool=tape`. Layout from the
-operator and the photo folders: hall 16×10 — passage 2.5×11 — bedroom 10×10;
-bathroom 22 sq ft on hall **and** passage. Mapping: `capture/room_map.json`.
+## Fix loop
 
-Home LiDAR vs that tape is **FAIL** (see `benchmark_report.md`): 16.69 / 25.25 m²
-against 28.75 m². Do not invent ceiling, door, or bathroom-wall rows to fill the
-SKIPs.
+| Round | Gate | Declared cause | Predicted | Result |
+|---|---|---|---|---|
+| 1, photo tier | footprint +422% against LiDAR, before tape existed | focal length read from the wrong EXIF IFD | under +50%, not a pass | +916%, then −36% after three more changes; FAIL |
+| 2, LiDAR | footprint −12% and −42% against tape | furniture bounding rooms short of their walls | bedroom 8–9.5 m², footprint PASS | no change at all; hypothesis refuted; the diagnosis found the room-map defect |
+
+Round 1: `fixloop/FIX_DECLARATION.md`, `fixloop/POSTMORTEM.md`, diff `git diff d15c21b..80c44f3`.
+Round 2: `fixloop/round2/`, declaration `88af4e3` before fix `20cb44a`, with before and after runs,
+manifests and gate tables. Index: `fixloop/README.md`. Neither round moved a gate to PASS, and both
+post-mortems say why. The tag `fixloop-before` is off this history; do not check it out.
+
+## The external audit
+
+`docs/external_vision_audit_review.md` answers the "GOT-Vision" executive summary claim by claim.
+Its "no focal-length EXIF", "640×360 video" and "ceiling ground truth 2.60 / 2.55 / 2.50 / 2.45 m"
+findings come from its own script rather than from these captures. Its 2.20 m ceiling sanity bound was right. Adding it exposed that room ceilings were read where a
+fitted plane crosses the world origin rather than over the room; both are fixed in `8aaf149`.
 
 ## Do not invent
 
-- Ceiling, door widths, bathroom walls, diagonals — still unmeasured. Leave SKIP.
-- No Magicplan/Polycam export. Head-to-head 10% is zero until you drop `08_competitor_export/`.
-- `04`–`07` DROP slots are empty (damage + repeat).
+- Ceiling heights, door widths, bathroom walls. The tape has none, so those gates stay SKIP. Do not
+  copy the audit script's ceiling constants into `ground_truth.csv`.
+- No consumer-app export exists, so the Part 3 head-to-head scores zero.
+- DROP slots `04` to `06`, the staged-damage room, are empty.
 
-## You still have to do (only you)
+## Only you can do these
 
-1. Ceiling ×3 per room, door widths, bathroom walls → same CSV.
-2. One room again in Stray → `07_repeat_room_lidar/`.
-3. Magicplan or Polycam, 2 rooms → `08_competitor_export/` + app version.
-4. Photos at **1×**, 4–8 per room, floor visible. Steps: `../DROP_CAPTURES_HERE/STEP_BY_STEP.md`.
-
-Without (2)–(3) you can still submit an **honest** repo that beats Saurabh on stitched LiDAR and does not fake the rest.
+1. Laser the ceiling in each room, three readings per room, into `capture/ground_truth.csv`.
+2. Measure each door width, and the bathroom's walls.
+3. Say which side the bathroom door opens onto. The tape lists both hall–bathroom and
+   passage–bathroom for one door at the junction; the external audit assumes the passage only.
+4. Tape the bedroom wall to wall in centimetres, and say whether 10 × 10 ft included the
+   wardrobe. A tape in whole feet cannot adjudicate a 2 cm gate.
+5. Magicplan or Polycam on two rooms, into `08_competitor_export/`, with the app version.
+6. Photos at 1×, four to eight per room, with floor in frame.
 
 ## Do not put in the zip
 
-- A `reports/benchmark/` that shows footprint **PASS** (the honest tape run is 16.69 / 25.25 vs 28.75, both FAIL)
-- **Entire `quarantine/`** (README says nothing here is submittable)
-- `scripts/generate_benchmarks.py` and `scripts/build_pdf.py` (moved under quarantine; they rebuild fake PASS / Magicplan tables)
-- `reports/eval_*` (pre-merge: 2-room `c00a170fe1`, 6-room / 27.20 m² long walk, negative interval `lo`)
-- Guessed metres in `ground_truth.csv`
-- The 3.4 GB `IMG_1582.mp4` as a working video-tier demo (~371 m² blob)
-- 0.5× photo folders as a success (the 4-folder plan is a disclosed **FAIL**)
+- `quarantine/`, which holds fabricated artefacts kept only as an audit trail
+- `reports/eval_*`, superseded runs
+- the 3.6 GB video
 
-## Commit before push (uncommitted as of this file)
+## Pushing
 
-Saurbh-integration that is not on `main` yet:
-
-- `scripts/setup.sh`
-- `tests/fixtures/raytrace_room.py` + `tests/test_synthetic_lidar.py` + `tests/test_intervals.py`
-- thin-tier ±60% intervals, folder-name stitch
-- this file, `.gitignore` exception for `reports/verified/`
-
-History is already incremental (`fixloop-before` tag exists). Do not squash into one dump.
-Remote is `codeanuj2528/Cozmo`, ahead 50 / behind 26 — rebase or merge before force-pushing, and **do not force-push** unless you mean to.
+The remote `codeanuj2528/Cozmo` has diverged from this history. Merge or rebase; do not force-push
+unless you mean to overwrite it. Do not squash: the incremental history is scored.
