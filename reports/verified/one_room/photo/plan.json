@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0.0",
+  "pipeline_version": "0.1.0",
+  "capture_id": "photos_bathroom",
+  "tier": "photo",
+  "created_at": "2026-09-13T06:25:46.538783Z",
+  "rooms": [],
+  "adjacency": [],
+  "damage": [],
+  "concealed_flags": [],
+  "scope_items": [],
+  "drift": {
+    "method": "not applicable at the photo tier: loop closure requires revisiting a place after going elsewhere, and per-room stills contain no trajectory to close",
+    "loop_closures_found": 0,
+    "residual_before_m": 0.0,
+    "residual_after_m": 0.0,
+    "max_pose_correction_m": 0.0,
+    "footprint_area_before_m2": 0.0,
+    "footprint_area_after_m2": 0.0,
+    "applied": false
+  },
+  "calibration": {
+    "method": "prior_only",
+    "nominal_coverage": 0.9,
+    "empirical_coverage": {},
+    "residual_quantiles": {},
+    "fitted_on": "uncalibrated"
+  },
+  "quality": {
+    "tier": "photo",
+    "device_model": "iPhone 17 Pro",
+    "frames_available": 7,
+    "frames_used": 3,
+    "median_depth_confidence": null,
+    "surface_coverage": 0.0,
+    "low_light_fraction": 0.0,
+    "specular_fraction": 0.0,
+    "warnings": [
+      "bathroom: reconstruction rejected as physically implausible (no_room); reported as not reconstructed rather than published",
+      "depth backbone: depth_anything_v2_metric_indoor"
+    ]
+  },
+  "total_floor_area": {
+    "value": 0.0,
+    "lo": 0.0,
+    "hi": 0.0,
+    "unit": "m2",
+    "coverage": 0.9,
+    "method": "prior_only"
+  },
+  "runtime_seconds": 14.729914958006702
+}

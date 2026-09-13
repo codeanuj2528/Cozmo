@@ -1,0 +1,43 @@
+{
+  "pipeline_version": "0.1.0",
+  "schema_version": "1.0",
+  "capture_id": "photos_bathroom",
+  "tier": "photo",
+  "generated_at": "2026-09-13T06:25:46.538783+00:00",
+  "git_commit": "8aaf149",
+  "runtime_seconds": 14.73,
+  "timings": {
+    "total_s": 14.7299
+  },
+  "keyframes_used": 0,
+  "frames_available": 7,
+  "points_fused": 0,
+  "rooms_found": 0,
+  "total_floor_area_m2": 0.0,
+  "warnings": [
+    "bathroom: reconstruction rejected as physically implausible (no_room); reported as not reconstructed rather than published"
+  ],
+  "input_hash": "2c40f1b92a88ad12",
+  "config": {
+    "voxel_m": 0.02,
+    "grid_resolution_m": 0.03,
+    "min_depth_confidence": 1,
+    "max_depth_range_m": 5.0,
+    "max_keyframes": 600,
+    "keyframe_translation_m": 0.08,
+    "keyframe_rotation_deg": 6.0,
+    "canonical_rotation": true,
+    "drift_correction": true,
+    "snap_walls_to_frame": true,
+    "snap_tolerance_deg": 6.0,
+    "detect_damage": true,
+    "build_scope": true,
+    "max_wall_lines": 44,
+    "min_room_area_m2": 1.5,
+    "min_inscribed_radius_m": 0.33,
+    "calibration_path": "calibration/intervals.json",
+    "weights_dir": "weights",
+    "seed": 0,
+    "labels": {}
+  }
+}
