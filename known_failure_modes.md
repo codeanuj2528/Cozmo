@@ -199,3 +199,11 @@ lights, the wet-look case in §4. Which of the two inflates the outline is not y
 The bedroom-only walk began and ended at the doorway, outside the room, so the plan holds a 3.70 m²
 strip of passage beside the 7.81 m² bedroom, and the footprint row compares 11.51 m² with the
 bedroom's 9.29 m². The protocol asks for both still periods just inside the doorway.
+
+## 20. The assignment's flat, scanned twice, disagrees with itself
+
+`single_scan_floor_only.zip` and `single_scan_with_ceiling.zip` cover the same space. They
+reconstruct as 7 rooms and 35.74 m² and as 6 rooms and 31.57 m², 13% apart. Neither has tape, so
+neither can be called right. Both plans also close the gaps between declared neighbours by moving
+whole rooms, by up to 1.73 m, which says those rooms were not reconstructed touching in the first
+place; `quality.warnings` in each plan lists every move.

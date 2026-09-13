@@ -9,18 +9,18 @@ doors or bathroom walls, so those gates report SKIP.
 
 | status | count |
 |---|---|
-| PASS | 9 |
+| PASS | 13 |
 | FAIL | 19 |
-| SKIP | 22 |
+| SKIP | 34 |
 
 Full table: `reports/verified/gates/gate_table.txt`.
 
-PASS: drift accountability on the four LiDAR runs; room overlap on the two home walks, the bedroom
-scan and the 0.5× photo set; interval coverage on the 1× hall photos, whose intervals are metres
+PASS: drift accountability on the six LiDAR runs; room overlap on the two home walks, the bedroom
+scan, the assignment's two flat scans and the 0.5× photo set; interval coverage on the 1× hall photos, whose intervals are metres
 wide. FAIL: walls, footprint and interval coverage on the two home walks, the bedroom scan and the
 0.5× photo set; adjacency on the two home walks and the 0.5× photo set; walls and footprint on the
 1× hall photos; both repeatability pairs. SKIP: ceiling height and opening widths on every capture
-of the flat (no tape), the assignment zip `c00a170fe1` (different property, no tape), adjacency on
+of the flat (no tape), every other gate on the assignment's three zips (a different property, no tape), adjacency on
 the bedroom scan and the 1× hall photos, room overlap on the 1× hall photos, and drift on both photo
 sets (not applicable).
 
@@ -148,12 +148,25 @@ Metric scale is not solved. The whole-flat walkthrough produces one room of abou
 the assignment zip's own `rgb.mp4` without its poses gives 339.61 m² for a room LiDAR puts at
 17.87 m². Do not choose this tier at a walk-in.
 
-## The assignment's own single room
+## The assignment's three samples
 
-`c00a170fe1` (`single_room.zip`) reconstructs as 1 room of 17.87 m² with its ceiling unmeasured,
-because the capture has no upward lap. This repository published 17.36 m² for it until `50d192b`,
-which merges a short step the cell complex leaves in the middle of a straight wall back into the
-wall. There is no tape for that room.
+The zips that came with the brief, run unchanged. They are a different property with no tape, so
+every accuracy gate on them is SKIP. Drift accountability passes on all three, and room overlap on
+the two scans with more than one room.
+
+| Zip | Capture | Walk | Rooms | Area | Ceilings |
+|---|---|---|---|---|---|
+| `single_room.zip` | `c00a170fe1` | 37 s, no upward frames | 1 | 17.87 m² (192 sq ft) | unmeasured |
+| `single_scan_floor_only.zip` | `1a8384c3f6` | 115 s, no upward frames | 7 | 35.74 m² (385 sq ft) | unmeasured |
+| `single_scan_with_ceiling.zip` | `c7d28f72c6` | 215 s, 16.6% of frames look up | 6 | 31.57 m² (340 sq ft) | 2.845–2.980 m in 4 of 6 rooms |
+
+The two flat scans cover the same space and disagree by 13% on area and by one room; without tape
+there is no telling which is closer. Both plans close the gaps between rooms by translating them,
+by up to 1.73 m on the floor-only scan and 1.34 m on the other, and each reports one damage region
+nobody has checked: a 0.99 m crack and a 0.03 m² water stain.
+
+`single_room.zip` published 17.36 m² until `50d192b`, which merges a short step the cell complex
+leaves in the middle of a straight wall back into the wall.
 
 ## Head-to-head
 
@@ -168,6 +181,8 @@ No consumer-app export exists, so the Part 3 head-to-head is not done.
 .venv/bin/python -m cozmo.cli run -i ../DROP_CAPTURES_HERE/03_multiroom_photos -o reports/verified/multiroom_photos
 .venv/bin/python -m cozmo.cli run -i ../DROP_CAPTURES_HERE/07_repeat_room_lidar/5621ec5c54 -o reports/verified/bedroom_solo
 .venv/bin/python -m cozmo.cli run -i ../DROP_CAPTURES_HERE/03b_multiroom_photos_1x -o reports/verified/photos_1x
+.venv/bin/python -m cozmo.cli run -i ../data/raw/1a8384c3f6 -o reports/verified/single_scan_floor_only
+.venv/bin/python -m cozmo.cli run -i ../data/raw/c7d28f72c6 -o reports/verified/single_scan_with_ceiling
 .venv/bin/python -m cozmo.cli benchmark --runs reports/verified \
     --ground-truth capture/ground_truth.csv --room-map capture/room_map.json \
     --repeat multiroom_home,multiroom_long --repeat bedroom_solo,multiroom_long \

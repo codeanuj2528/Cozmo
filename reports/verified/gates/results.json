@@ -538,6 +538,162 @@
     }
   },
   {
+    "gate": "wall_lengths",
+    "scope": "single_scan_floor_only",
+    "tier": "lidar",
+    "measured": "no wall ground truth",
+    "threshold": "<= 2 cm",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "ceiling_height",
+    "scope": "single_scan_floor_only",
+    "tier": "lidar",
+    "measured": "no ceiling ground truth",
+    "threshold": "<= 1.5 cm",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "opening_widths",
+    "scope": "single_scan_floor_only",
+    "tier": "lidar",
+    "measured": "no opening ground truth",
+    "threshold": "<= 2 cm",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "footprint",
+    "scope": "single_scan_floor_only",
+    "tier": "lidar",
+    "measured": "no footprint ground truth",
+    "threshold": "within +-5%",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "interval_coverage",
+    "scope": "single_scan_floor_only",
+    "tier": "lidar",
+    "measured": "no ground truth to check coverage against",
+    "threshold": ">= 90%",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "room_overlap",
+    "scope": "single_scan_floor_only",
+    "tier": "lidar",
+    "measured": "largest overlap 0.000 m2 (0.0% of smallest room), total 0.000 m2",
+    "threshold": "no overlap above 2% of the smallest room",
+    "status": "PASS",
+    "detail": {
+      "worst_m2": 2.68339130915507e-08,
+      "fraction": 1.0687029636754632e-08
+    }
+  },
+  {
+    "gate": "adjacency",
+    "scope": "single_scan_floor_only",
+    "tier": "lidar",
+    "measured": "no adjacency ground truth",
+    "threshold": "all edges correct",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "drift_accountability",
+    "scope": "single_scan_floor_only",
+    "tier": "lidar",
+    "measured": "keyframe pose graph, ICP-verified loop closures, gauge-fixed least squares; 19 closures, residual 0.9058 -> 0.4457, max correction 60.2 cm",
+    "threshold": "a stated method with an ablation; poses used as-is fails",
+    "status": "PASS",
+    "detail": {
+      "applied": true,
+      "closures": 19
+    }
+  },
+  {
+    "gate": "wall_lengths",
+    "scope": "single_scan_with_ceiling",
+    "tier": "lidar",
+    "measured": "no wall ground truth",
+    "threshold": "<= 2 cm",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "ceiling_height",
+    "scope": "single_scan_with_ceiling",
+    "tier": "lidar",
+    "measured": "no ceiling ground truth",
+    "threshold": "<= 1.5 cm",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "opening_widths",
+    "scope": "single_scan_with_ceiling",
+    "tier": "lidar",
+    "measured": "no opening ground truth",
+    "threshold": "<= 2 cm",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "footprint",
+    "scope": "single_scan_with_ceiling",
+    "tier": "lidar",
+    "measured": "no footprint ground truth",
+    "threshold": "within +-5%",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "interval_coverage",
+    "scope": "single_scan_with_ceiling",
+    "tier": "lidar",
+    "measured": "no ground truth to check coverage against",
+    "threshold": ">= 90%",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "room_overlap",
+    "scope": "single_scan_with_ceiling",
+    "tier": "lidar",
+    "measured": "largest overlap 0.000 m2 (0.0% of smallest room), total 0.000 m2",
+    "threshold": "no overlap above 2% of the smallest room",
+    "status": "PASS",
+    "detail": {
+      "worst_m2": 1.1219599369447194e-24,
+      "fraction": 5.412467941437021e-25
+    }
+  },
+  {
+    "gate": "adjacency",
+    "scope": "single_scan_with_ceiling",
+    "tier": "lidar",
+    "measured": "no adjacency ground truth",
+    "threshold": "all edges correct",
+    "status": "SKIP",
+    "detail": {}
+  },
+  {
+    "gate": "drift_accountability",
+    "scope": "single_scan_with_ceiling",
+    "tier": "lidar",
+    "measured": "keyframe pose graph, ICP-verified loop closures, gauge-fixed least squares; 41 closures, residual 0.6900 -> 0.2708, max correction 61.1 cm",
+    "threshold": "a stated method with an ablation; poses used as-is fails",
+    "status": "PASS",
+    "detail": {
+      "applied": true,
+      "closures": 41
+    }
+  },
+  {
     "gate": "repeatability",
     "scope": "multiroom_home vs multiroom_long",
     "tier": "lidar",

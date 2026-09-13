@@ -4,8 +4,8 @@
 built by matching areas, which was wrong on both home captures; its per-room figures that name
 `room_03` passage, `room_05` bathroom, or the first walk's `room_01` hall are superseded. Current
 numbers against tape: `benchmark_report.md`. Current plans: `reports/verified/`, with the long walk
-at 5 rooms and 25.27 m², the first walk at 3 rooms and 16.57 m², and the assignment zip at 1 room and
-17.87 m².
+at 5 rooms and 25.27 m², the first walk at 3 rooms and 16.57 m², the assignment's single room at 17.87 m², and its floor-only and with-ceiling scans at 7 rooms
+and 35.74 m² and 6 rooms and 31.57 m².
 
 **Superseded headline numbers (12 Sep eval_*).** Current verified runs are in
 `docs/verified_lidar.md`: `c00a170fe1` is **1 room / 17.36 m²** (not 2);

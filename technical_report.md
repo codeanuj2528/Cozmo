@@ -262,12 +262,13 @@ tape to its own precision, 15.8 × 9.6 ft against 16 × 10 ft. The bedroom does 
 against 9.29 m², and a second walk of the same room gives 7.03 m², so the defect is in the
 reconstruction, not in the tape.
 
-Against the tape the gates read 9 PASS, 19 FAIL, 22 SKIP. Ceiling and opening gates are SKIP
+Against the tape the gates read 13 PASS, 19 FAIL, 34 SKIP. Ceiling and opening gates are SKIP
 because neither was taped. LiDAR intervals cover the tape on none of 31 measurements: they model
 sensor and drift error, not a merged or a short room. The photo tier fails at +220% and the video
 tier does not produce a metric plan. Walked alone, the bedroom reads 7.81 m² against 9.29 m²;
 photographed on the 1× lens, the hall reads 35.12 m² against 14.86 m², down from a rejected 71.8 m²
-at 0.5×.
+at 0.5×. The assignment's two scans of one flat, which has no tape, give 35.74 m² over 7 rooms
+and 31.57 m² over 6.
 
 `quarantine/README.md` records earlier artefacts that were removed rather than submitted: a
 benchmark over procedurally generated rooms, a head-to-head against an app that was never run,

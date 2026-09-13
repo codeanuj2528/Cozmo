@@ -18,7 +18,7 @@ Requirement → where it lives → what it produces → status.
 | 1.3 | Install in under 10 minutes | `capture/PROTOCOL.md` | Two free App Store apps, no sign-in, no provisioning | **MET** |
 | 1.4 | Photo tier, 2–8 stills per room, no depth or poses | `cozmo/io/photo.py`, `cozmo/pipeline/photo.py` | Runs on 58 real stills at 0.5× and 12 of the hall at 1× | **PARTIAL**: runs; fails its gates, the 1× hall at +136% |
 | 1.5 | Video tier, handheld walkthrough | `cozmo/pipeline/video.py` | Runs; whole-flat clip gives one room of about 371 m², the 17.87 m² assignment room gives 339.61 m² | **NOT MET** as a metric product |
-| 1.6 | LiDAR tier: depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | Home long walk: 5 rooms, 25.27 m², 7 openings, 3/4 taped connections | **MET** |
+| 1.6 | LiDAR tier: depth, poses, intrinsics | `cozmo/io/stray.py`, `cozmo/pipeline/lidar.py` | Home long walk: 5 rooms, 25.27 m², 7 openings, 3/4 taped connections; the assignment's two flat scans give 7 and 6 rooms | **MET** |
 | 1.7 | Device matrix | `capture/DEVICE_MATRIX.md` | Tier availability per device; accuracy cells pending | **PARTIAL** |
 | 1.8 | Same output contract from each tier | `cozmo/schema.py`, `cozmo/pipeline/__init__.py` | One `PropertyPlan`, one `reconstruct`, three builders | **MET** |
 | 1.9 | Intervals widen honestly as data thins | `cozmo/uncertainty/calibration.py` | Photo walls at ±3.0 m on average, but LiDAR intervals cover the tape on 0 of 31 measurements (2.24) | **PARTIAL** |
@@ -93,7 +93,7 @@ Requirement → where it lives → what it produces → status.
 | D2 | Capture route and device matrix | `capture/PROTOCOL.md`, `capture/DEVICE_MATRIX.md` | **MET** |
 | D3 | README to running in 15 minutes, one command per capture | `README.md`, `scripts/setup.sh` | **MET** |
 | D4 | Reproduction bundle | `run_manifest.json` per run: commit, input hash, config, timings | **MET** |
-| D5 | Benchmark report across three tiers | `benchmark_report.md`, `reports/verified/gates/` | **PARTIAL**: 9 PASS, 19 FAIL, 22 SKIP |
+| D5 | Benchmark report across three tiers | `benchmark_report.md`, `reports/verified/gates/` | **PARTIAL**: 13 PASS, 19 FAIL, 34 SKIP |
 | D6 | Fix loop bundle | `fixloop/`, index `fixloop/README.md` | **MET** |
 | D7 | Technical report, at most 6 pages | `technical_report.md` | **MET** |
 | D8 | Raw benchmark data: sensor logs, ground truth, app exports | `DROP_CAPTURES_HERE/`, `capture/` | **PARTIAL**: no app export, partial tape |

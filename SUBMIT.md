@@ -9,6 +9,8 @@ gate table.
 |---|---|
 | `reports/verified/multiroom_long/plan.png` | The home flat, protocol followed. 5 rooms, 25.27 m² against a taped 28.75 m² (−12%). The hall reconstructs at 15.8 × 9.6 ft against a taped 16 × 10 ft. |
 | `reports/verified/single_room/plan.png` | The assignment's `single_room.zip`. 1 room, 17.87 m², one opening, ceiling unmeasured because that capture has no upward lap. |
+| `reports/verified/single_scan_with_ceiling/plan.png` | The assignment's with-ceiling scan. 6 rooms, 31.57 m², ceilings 2.845–2.980 m in 4 of them. No tape, so unscored. |
+| `reports/verified/single_scan_floor_only/plan.png` | The same flat without the ceiling lap. 7 rooms, 35.74 m², ceilings unmeasured, 13% from the scan above. |
 | `reports/verified/multiroom_home/plan.png` | The same flat on a first walk with the ceiling lap skipped. 3 rooms, 16.57 m² (−42%). Worth showing beside the long walk: it is why the protocol makes the ceiling lap mandatory. |
 
 Examiner command after `scripts/setup.sh`:
@@ -30,7 +32,7 @@ Examiner command after `scripts/setup.sh`:
 
 ## Accuracy against tape
 
-Full detail in `benchmark_report.md`. Gates: **9 PASS, 19 FAIL, 22 SKIP**
+Full detail in `benchmark_report.md`. Gates: **13 PASS, 19 FAIL, 34 SKIP**
 (`reports/verified/gates/gate_table.txt`). Footprint, walls, interval coverage, adjacency and
 repeatability fail, and the report says why for each.
 
