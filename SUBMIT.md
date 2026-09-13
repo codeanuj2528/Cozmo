@@ -25,10 +25,12 @@ Examiner command after `scripts/setup.sh`:
 | `reports/verified/one_room/video/plan.png` | Video tier on the room LiDAR puts at 17.87 m²: 339.61 m². Scale failed. |
 | `reports/verified/one_room/photo/plan.png` | Bathroom stills only: no room recovered. |
 | DROP `02_multiroom_video` | Whole-flat video: one room of about 371 m². Not in the repository. |
+| `reports/verified/bedroom_solo/plan.png` | The bedroom alone, 13 Sep. 7.81 m² against 9.29 m² taped (−16%), 12.4 × 7.2 ft against 10 × 10 ft, plus a 3.70 m² passage strip. FAIL. |
+| `reports/verified/photos_1x/plan.png` | The hall on the 1× lens, 12 stills. 35.12 m² against 14.86 m² (+136%). FAIL, though inside the plausibility bound the 0.5× hall broke. |
 
 ## Accuracy against tape
 
-Full detail in `benchmark_report.md`. Gates: **6 PASS, 13 FAIL, 14 SKIP**
+Full detail in `benchmark_report.md`. Gates: **9 PASS, 19 FAIL, 22 SKIP**
 (`reports/verified/gates/gate_table.txt`). Footprint, walls, interval coverage, adjacency and
 repeatability fail, and the report says why for each.
 
@@ -73,7 +75,10 @@ fitted plane crosses the world origin rather than over the room; both are fixed 
 4. Tape the bedroom wall to wall in centimetres, and say whether 10 × 10 ft included the
    wardrobe. A tape in whole feet cannot adjudicate a 2 cm gate.
 5. Magicplan or Polycam on two rooms, into `08_competitor_export/`, with the app version.
-6. Photos at 1×, four to eight per room, with floor in frame.
+6. Photos at 1× of the passage, bedroom and bathroom, four to eight per room with floor in frame.
+   The hall is done.
+7. A second bedroom-only Stray walk that starts and ends inside the room, for a clean
+   repeatability pair.
 
 ## Do not put in the zip
 

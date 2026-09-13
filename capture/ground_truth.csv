@@ -52,3 +52,15 @@ ae3edc814d,,footprint_area,property,28.7535,tape,hall+bedroom+bathroom+passage
 163f18d3ac,hall,adjacency,bathroom,1,tape,same as ae3edc814d
 163f18d3ac,passage,adjacency,bathroom,1,tape,same as ae3edc814d
 163f18d3ac,,footprint_area,property,28.7535,tape,same four rooms
+# 5621ec5c54 is the bedroom walked on its own with Stray Scanner on 13 Sep 2026. Same tape as ae3edc814d.
+5621ec5c54,bedroom,wall_length,1,3.0480,tape,same tape as ae3edc814d; 10 ft
+5621ec5c54,bedroom,wall_length,2,3.0480,tape,10 ft
+5621ec5c54,bedroom,wall_length,3,3.0480,tape,10 ft
+5621ec5c54,bedroom,wall_length,4,3.0480,tape,10 ft
+5621ec5c54,bedroom,floor_area,room,9.2903,tape,100 sq ft
+# photos_1x is the hall photographed on the 1x lens on 13 Sep 2026. Same tape as ae3edc814d.
+photos_1x,hall,wall_length,1,4.8768,tape,same tape as ae3edc814d; 16 ft
+photos_1x,hall,wall_length,2,3.0480,tape,10 ft
+photos_1x,hall,wall_length,3,4.8768,tape,16 ft
+photos_1x,hall,wall_length,4,3.0480,tape,10 ft
+photos_1x,hall,floor_area,room,14.8645,tape,160 sq ft

@@ -186,3 +186,16 @@ The property levels are therefore still read at the origin, and the published pl
 that reading produces. Neither version is closer to the tape overall: the bathroom improves from
 +29% to +5% and the hall worsens from −11% to −15%. A segmentation that a 3 cm band edge can re-cut
 is not stable enough to be judged by a tape recorded to the foot.
+
+## 18. The 1× hall is nearly the right height and far too large
+
+Twelve stills of the hall on the 1× lens reconstruct a 2.74 m ceiling, within 6% of LiDAR's 2.60 m,
+over a 35.12 m² floor against 14.86 m² taped. A scale error would move both together. One photograph
+of eight failed to register, and the hall has a glossy tiled floor that mirrors the windows and the
+lights, the wet-look case in §4. Which of the two inflates the outline is not yet measured.
+
+## 19. A room walked on its own keeps the passage it was entered from
+
+The bedroom-only walk began and ended at the doorway, outside the room, so the plan holds a 3.70 m²
+strip of passage beside the 7.81 m² bedroom, and the footprint row compares 11.51 m² with the
+bedroom's 9.29 m². The protocol asks for both still periods just inside the doorway.

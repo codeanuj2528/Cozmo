@@ -9,17 +9,20 @@ doors or bathroom walls, so those gates report SKIP.
 
 | status | count |
 |---|---|
-| PASS | 6 |
-| FAIL | 13 |
-| SKIP | 14 |
+| PASS | 9 |
+| FAIL | 19 |
+| SKIP | 22 |
 
 Full table: `reports/verified/gates/gate_table.txt`.
 
-PASS: drift accountability on the three LiDAR runs; room overlap on the home long walk, the home
-first walk and the photo tier. FAIL: walls, footprint, interval coverage and adjacency on each of
-the two home LiDAR walks and on the photo tier, plus repeatability across the two walks. SKIP:
-ceiling and opening widths (no tape), the assignment zip `c00a170fe1` (different property, no
-tape), and photo-tier drift (not applicable).
+PASS: drift accountability on the four LiDAR runs; room overlap on the two home walks, the bedroom
+scan and the 0.5× photo set; interval coverage on the 1× hall photos, whose intervals are metres
+wide. FAIL: walls, footprint and interval coverage on the two home walks, the bedroom scan and the
+0.5× photo set; adjacency on the two home walks and the 0.5× photo set; walls and footprint on the
+1× hall photos; both repeatability pairs. SKIP: ceiling height and opening widths on every capture
+of the flat (no tape), the assignment zip `c00a170fe1` (different property, no tape), adjacency on
+the bedroom scan and the 1× hall photos, room overlap on the 1× hall photos, and drift on both photo
+sets (not applicable).
 
 ## Which reconstructed room is which
 
@@ -56,6 +59,24 @@ Home first walk `ae3edc814d`: 1.4% of frames aimed at the ceiling, and the hall 
 | **Footprint** | **28.75 m²** | **16.57 m²** | **−42%, FAIL** |
 
 Adjacency 2/4. Walls 0/24.
+
+## The bedroom on its own
+
+`5621ec5c54`, 13 Sep: the bedroom walked alone with Stray Scanner, 128 s, with the ceiling lap
+(17.7% of frames look more than 20° up). Rooms are named from camera frames
+(`capture/room_identity/5621ec5c54.jpg`). The tape is in whole feet, so each taped side carries
+about ±15 cm.
+
+| | Tape | Bedroom scan | Long walk | First walk |
+|---|---|---|---|---|
+| Area | 9.29 m² (100 sq ft) | 7.81 m² (84 sq ft), −16% | 5.28 m² (57 sq ft), −43% | 7.03 m² (76 sq ft), −24% |
+| Size | 10 × 10 ft | 12.4 × 7.2 ft | 8.5 × 6.8 ft | 9.5 × 8.8 ft |
+| Ceiling | not taped | 2.606 m | 2.635 m | 2.632 m |
+
+The scan is outside the tape's precision on both sides, one long and one short. The plan also holds a
+3.70 m² strip of passage where the walk began and ended, so its footprint row reads 11.51 m² against
+the bedroom's 9.29 m² (+24%). Against the long walk's bedroom 0/5 walls agree (worst 120.7 cm) and the
+ceilings are 2.9 cm apart: FAIL.
 
 ## Repeatability
 
@@ -105,6 +126,22 @@ Adjacency 2/4, and both edges come from folder names, not detection. Walls 0/10 
 Against LiDAR depth of the same flat the depth model over-predicts on 0.5× frames by 1.57×; the
 camera height implied by the detected floor gives 1.76×.
 
+### The hall again, on the 1× lens
+
+`photos_1x`, 13 Sep: 12 stills of the hall on the 24 mm main camera. The pipeline keeps 8 and
+registers 7.
+
+| | Tape | 0.5× set | 1× set |
+|---|---|---|---|
+| Area | 14.86 m² (160 sq ft) | rejected at 71.8 m² | 35.12 m² (378 sq ft), +136% |
+| Size | 16 × 10 ft | — | 24.4 × 22.3 ft |
+| Ceiling | not taped (LiDAR 2.60 m) | — | 2.74 m |
+
+The 1× lens roughly halves the area the hall reconstructs to and brings it inside the plausibility
+bound, but it still fails. The ceiling is within 6% of LiDAR while the floor is 2.4 times too large,
+which points at the room's extent rather than its scale. Scale came from 4 of 8 photographs that
+showed enough floor. Interval coverage passes 5/5 only because the intervals are about 7 m wide.
+
 ## Video tier
 
 Metric scale is not solved. The whole-flat walkthrough produces one room of about 371 m², and
@@ -128,9 +165,12 @@ exists, so the Part 3 head-to-head is not done.
 .venv/bin/python -m cozmo.cli run -i ../DROP_CAPTURES_HERE/01_multiroom_lidar/ae3edc814d -o reports/verified/multiroom_home
 .venv/bin/python -m cozmo.cli run -i ../data/raw/c00a170fe1 -o reports/verified/single_room
 .venv/bin/python -m cozmo.cli run -i ../DROP_CAPTURES_HERE/03_multiroom_photos -o reports/verified/multiroom_photos
+.venv/bin/python -m cozmo.cli run -i ../DROP_CAPTURES_HERE/07_repeat_room_lidar/5621ec5c54 -o reports/verified/bedroom_solo
+.venv/bin/python -m cozmo.cli run -i ../DROP_CAPTURES_HERE/03b_multiroom_photos_1x -o reports/verified/photos_1x
 .venv/bin/python -m cozmo.cli benchmark --runs reports/verified \
     --ground-truth capture/ground_truth.csv --room-map capture/room_map.json \
-    --repeat multiroom_home,multiroom_long --out reports/benchmark
+    --repeat multiroom_home,multiroom_long --repeat bedroom_solo,multiroom_long \
+    --out reports/benchmark
 ```
 
 The benchmark command exits non-zero because gates fail. That is the expected result.

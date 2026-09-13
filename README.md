@@ -125,7 +125,7 @@ you are looking for a tier-specific bug, it is almost certainly in the front hal
 .venv/bin/python -m pytest tests/ -q
 ```
 
-66 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
+68 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
 intervals, and the schema contract. Several exist because a defect got past review.
 
 ## State of the evidence
@@ -139,10 +139,12 @@ Numbers against the operator's tape: `benchmark_report.md`. What to show and wha
 | `c00a170fe1`, assignment zip | LiDAR | 1 | 17.87 m² | yes |
 | `ae3edc814d`, home, no ceiling lap | LiDAR | 3 | 16.57 m², tape 28.75 | beside the long walk |
 | home, 58 stills at 0.5× | photo | 3 | 92.00 m² | disclose the fail |
+| `5621ec5c54`, bedroom alone | LiDAR | 1, plus a passage strip | 7.81 m², tape 9.29 | disclose |
+| hall, 12 stills at 1× | photo | 1 | 35.12 m², tape 14.86 | disclose the fail |
 | same room as the assignment zip | video | 2 | 339.61 m² | disclose the fail |
 | home walkthrough | video | 1 | about 371 m² | disclose; do not lead |
 
-**Choose the LiDAR tier for a walk-in.** Against tape the gates read 6 PASS, 13 FAIL, 14 SKIP.
+**Choose the LiDAR tier for a walk-in.** Against tape the gates read 9 PASS, 19 FAIL, 22 SKIP.
 Ceiling and door rows were never taped, so those gates stay `SKIP`. Room names come from camera
 frames (`capture/room_identity/`), not from area. `quarantine/` is the audit trail of removed
 fakes; do not quote it.

@@ -8,6 +8,8 @@ Regenerate with the commands at the end of `benchmark_report.md`. Room names per
 | `multiroom_long` | `163f18d3ac`, home, protocol followed | LiDAR | 5 | 25.27 m² | 2.601 / 2.635 / 2.561 / unmeasured / 2.683 m | 7 | 28.75 m², −12% |
 | `multiroom_home` | `ae3edc814d`, home, ceiling lap skipped | LiDAR | 3 | 16.57 m² | 2.632 / 2.609 / 2.409 m | 5 | 28.75 m², −42% |
 | `single_room` | `c00a170fe1`, assignment zip | LiDAR | 1 | 17.87 m² | unmeasured | 1 | not taped |
+| `bedroom_solo` | `5621ec5c54`, the bedroom alone | LiDAR | 2 | 11.51 m² | 2.606 m / unmeasured | 0 | bedroom 7.81 m² against 9.29 m², −16% |
+| `photos_1x` | the hall, 12 stills at 1× | photo | 1 | 35.12 m² | 2.743 m | 1 | 14.86 m², +136% |
 | `multiroom_photos` | home, 58 stills | photo | 3 | 92.00 m² | — | 0 | 28.75 m², +220% |
 | `one_room/` | one room at three tiers | all | see `one_room/RESULTS.md` | | | | |
 | `gates/` | the scored gate table for the folders above | | | | | | |

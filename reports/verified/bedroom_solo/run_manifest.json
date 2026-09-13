@@ -1,0 +1,52 @@
+{
+  "pipeline_version": "0.1.0",
+  "schema_version": "1.0",
+  "capture_id": "5621ec5c54",
+  "tier": "lidar",
+  "generated_at": "2026-09-13T07:06:57.731340+00:00",
+  "git_commit": "29c900c",
+  "runtime_seconds": 70.578,
+  "timings": {
+    "drift_s": 35.1612,
+    "fuse_s": 25.1294,
+    "gravity_s": 0.0732,
+    "walls_s": 0.3265,
+    "occupancy_s": 0.2017,
+    "floorplan_s": 0.0102,
+    "openings_s": 0.6143,
+    "damage_s": 8.9201
+  },
+  "keyframes_used": 592,
+  "frames_available": 7682,
+  "points_fused": 935212,
+  "rooms_found": 2,
+  "total_floor_area_m2": 11.509,
+  "warnings": [
+    "snapped 8 wall runs onto the building frame, mean rotation 1.69 deg",
+    "room_02: no strong downward-facing surface more than 2.20 m above the floor; ceiling height is unmeasured at this capture",
+    "damage detector: none, 12 frames examined, 0 regions"
+  ],
+  "input_hash": "c259a531cf5025f2",
+  "config": {
+    "voxel_m": 0.02,
+    "grid_resolution_m": 0.03,
+    "min_depth_confidence": 1,
+    "max_depth_range_m": 5.0,
+    "max_keyframes": 600,
+    "keyframe_translation_m": 0.08,
+    "keyframe_rotation_deg": 6.0,
+    "canonical_rotation": true,
+    "drift_correction": true,
+    "snap_walls_to_frame": true,
+    "snap_tolerance_deg": 6.0,
+    "detect_damage": true,
+    "build_scope": true,
+    "max_wall_lines": 44,
+    "min_room_area_m2": 1.5,
+    "min_inscribed_radius_m": 0.33,
+    "calibration_path": "calibration/intervals.json",
+    "weights_dir": "weights",
+    "seed": 0,
+    "labels": {}
+  }
+}
