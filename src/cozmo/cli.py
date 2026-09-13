@@ -185,6 +185,22 @@ def fixloop(
     console.print("  - [cyan]after_run.json[/cyan] (Shipped Fix)")
 
 
+def parse_repeat_pairs(values: list[str]) -> list[list[str]]:
+    """Run-name pairs from `--repeat`, which may be given more than once.
+
+    One pair used to be the limit, so a room walked on its own could not be scored against the
+    same room inside a whole-flat walk while the two whole-flat walks were scored against each
+    other.
+    """
+    pairs: list[list[str]] = []
+    for value in values:
+        ids = [part.strip() for part in value.split(",") if part.strip()]
+        if len(ids) != 2:
+            raise typer.BadParameter(f"--repeat takes two run names separated by a comma, got {value!r}")
+        pairs.append(ids)
+    return pairs
+
+
 @app.command()
 def benchmark(
     runs_dir: Path = typer.Option(
@@ -199,10 +215,11 @@ def benchmark(
     room_map: Optional[Path] = typer.Option(
         None, "--room-map", help="JSON mapping plan room ids to ground-truth room names."
     ),
-    repeat: Optional[str] = typer.Option(
+    repeat: Optional[list[str]] = typer.Option(
         None,
         "--repeat",
-        help="Two capture ids separated by a comma, scored against each other for repeatability.",
+        help="Two run names separated by a comma, scored against each other for repeatability. "
+        "Give the option again to score another pair.",
     ),
 ) -> None:
     """Score every run against laser ground truth and print the gate table.
@@ -230,8 +247,7 @@ def benchmark(
     for name, plan in plans.items():
         results.extend(score_capture(plan, truth, resolve_capture_id(plan, name, truth)))
 
-    if repeat:
-        ids = [part.strip() for part in repeat.split(",") if part.strip()]
+    for ids in parse_repeat_pairs(repeat or []):
         chosen = [plans[i] for i in ids if i in plans]
         results.append(gate_repeatability(chosen, truth, ids))
 
