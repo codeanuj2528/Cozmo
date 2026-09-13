@@ -118,6 +118,24 @@ def load_ground_truth(path: Path | str, room_map_path: Path | str | None = None)
     return GroundTruth(records=records, room_map=room_map)
 
 
+def resolve_capture_id(plan, directory_name: str, truth: GroundTruth) -> str:
+    """Which capture id in the ground truth this run corresponds to.
+
+    A run's output directory is named for readability ("multiroom_home") while the tape
+    rows are keyed by the capture the operator measured, which is the Stray folder id
+    ("ae3edc814d"). Preferring the plan's own capture_id when the ground truth knows it,
+    and falling back to the directory name otherwise, covers both.
+
+    This lives here, once, because `benchmark` and `calibrate` each had their own rule and
+    only one of them was right: benchmark scored the property correctly while calibrate
+    reported "the ground truth and the plans share no rooms" on the same inputs, so no
+    quantile could ever be fitted from measurements that were sitting right there.
+    """
+    if getattr(plan, "capture_id", None) in truth.captures:
+        return plan.capture_id
+    return directory_name
+
+
 def resolve_room(plan_room: Room, truth: GroundTruth) -> str | None:
     """The ground-truth room this reconstructed room corresponds to.
 
