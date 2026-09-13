@@ -3,7 +3,7 @@
   "pipeline_version": "0.1.0",
   "capture_id": "ae3edc814d",
   "tier": "photo",
-  "created_at": "2026-09-13T06:25:29.631972Z",
+  "created_at": "2026-09-13T08:05:27.467612Z",
   "rooms": [
     {
       "room_id": "room_01",
@@ -985,7 +985,7 @@
     "median_depth_confidence": null,
     "surface_coverage": 0.75,
     "low_light_fraction": 0.0,
-    "specular_fraction": 0.0,
+    "specular_fraction": null,
     "warnings": [
       "bathroom: no photograph in this room showed enough floor to recover scale; using property consensus scale 0.613 from other rooms",
       "bedroom: no photograph in this room showed enough floor to recover scale; using property consensus scale 0.613 from other rooms",
@@ -994,6 +994,7 @@
       "3 room(s) have no connecting opening detected and cannot be stitched by doorway: room_01, room_02, room_04",
       "room_04 joined to room_02 from folder names only; the doorway itself was not measured",
       "room_01 joined to room_04 from folder names only; the doorway itself was not measured",
+      "room_04 and room_01 are declared connected but drawn 0.84 m apart, so the plan does not show that connection",
       "depth backbone: depth_anything_v2_metric_indoor"
     ]
   },
@@ -1005,5 +1006,5 @@
     "coverage": 0.9,
     "method": "prior_only"
   },
-  "runtime_seconds": 164.10614812502172
+  "runtime_seconds": 198.45556041700183
 }

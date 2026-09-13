@@ -3,11 +3,11 @@
   "schema_version": "1.0",
   "capture_id": "ae3edc814d",
   "tier": "photo",
-  "generated_at": "2026-09-13T06:25:29.631972+00:00",
-  "git_commit": "8aaf149",
-  "runtime_seconds": 164.106,
+  "generated_at": "2026-09-13T08:05:27.467612+00:00",
+  "git_commit": "61c98a7",
+  "runtime_seconds": 198.456,
   "timings": {
-    "total_s": 164.1062
+    "total_s": 198.4556
   },
   "keyframes_used": 0,
   "frames_available": 58,
@@ -21,7 +21,8 @@
     "passage: room scale 0.647 from 2 of 8 photographs that showed enough floor; applied to all",
     "3 room(s) have no connecting opening detected and cannot be stitched by doorway: room_01, room_02, room_04",
     "room_04 joined to room_02 from folder names only; the doorway itself was not measured",
-    "room_01 joined to room_04 from folder names only; the doorway itself was not measured"
+    "room_01 joined to room_04 from folder names only; the doorway itself was not measured",
+    "room_04 and room_01 are declared connected but drawn 0.84 m apart, so the plan does not show that connection"
   ],
   "input_hash": "833875fe9a59dfef",
   "config": {

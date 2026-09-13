@@ -3,18 +3,18 @@
   "schema_version": "1.0",
   "capture_id": "163f18d3ac",
   "tier": "lidar",
-  "generated_at": "2026-09-13T06:24:31.441696+00:00",
-  "git_commit": "8aaf149",
-  "runtime_seconds": 105.82,
+  "generated_at": "2026-09-13T08:04:31.254902+00:00",
+  "git_commit": "61c98a7",
+  "runtime_seconds": 142.111,
   "timings": {
-    "drift_s": 37.4484,
-    "fuse_s": 32.8724,
-    "gravity_s": 0.2486,
-    "walls_s": 2.4083,
-    "occupancy_s": 0.6513,
-    "floorplan_s": 0.0643,
-    "openings_s": 4.5021,
-    "damage_s": 27.1562
+    "drift_s": 35.2274,
+    "fuse_s": 52.4798,
+    "gravity_s": 0.7502,
+    "walls_s": 2.4951,
+    "occupancy_s": 0.813,
+    "floorplan_s": 0.0962,
+    "openings_s": 5.6737,
+    "damage_s": 43.8562
   },
   "keyframes_used": 600,
   "frames_available": 18649,
@@ -29,7 +29,7 @@
     "closed 0.609 m gap between room_05 and room_02 by translating room_02 onto the component anchored at room_01",
     "damage detector: none, 30 frames examined, 0 regions"
   ],
-  "input_hash": "098d060ff89fc8cc",
+  "input_hash": "6e1de0f3f1ae4447",
   "config": {
     "voxel_m": 0.02,
     "grid_resolution_m": 0.03,

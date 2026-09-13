@@ -4,9 +4,9 @@ capture_id,room,quantity,identifier,value_m,tool,notes
 # Bathroom area only (22 sq ft); no wall tape. Passage 2.5 ft wide x 11 ft long.
 # Layout (operator + photos): hall -- passage -- bedroom. Bathroom door sits at the
 # hall/passage junction (Nice Day mat); attached to hall and to passage, not to bedroom.
-# room_map.json maps reconstructed ids by that walk order, never by area:
-#   room_01 = hall, room_03 = passage, room_02 = bedroom
-#   room_05 = bathroom (only on 163f18d3ac). room_04 is an unmapped hall sliver.
+# room_map.json names reconstructed ids per capture from camera frames taken inside each room,
+# never by area or walk order, so one id is a different room on different captures.
+# room_04 on 163f18d3ac is an unmapped hall sliver.
 # No ceiling, diagonal, or opening tape yet. Do not invent those rows.
 # quantity also allows floor_area and adjacency (value_m = 1).
 # tool=tape. Same physical rooms on both home LiDAR captures.

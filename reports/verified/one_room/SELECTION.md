@@ -24,7 +24,13 @@ LiDAR + video are the **same room**. Photo is a **different room** (your bathroo
 
 ## Commands
 
+The video and photo inputs are links into the raw captures, which are not in git. Recreate them
+first:
+
 ```bash
+mkdir -p reports/verified/one_room/inputs/video_single reports/verified/one_room/inputs/photos_bathroom
+ln -s ../../../../../../data/raw/c00a170fe1/rgb.mp4 reports/verified/one_room/inputs/video_single/room.mp4
+ln -s ../../../../../../DROP_CAPTURES_HERE/03_multiroom_photos/bathroom reports/verified/one_room/inputs/photos_bathroom/bathroom
 .venv/bin/python -m cozmo.cli run -i ../data/raw/c00a170fe1 -o reports/verified/one_room/lidar
 .venv/bin/python -m cozmo.cli run -i reports/verified/one_room/inputs/video_single -o reports/verified/one_room/video
 .venv/bin/python -m cozmo.cli run -i reports/verified/one_room/inputs/photos_bathroom -o reports/verified/one_room/photo

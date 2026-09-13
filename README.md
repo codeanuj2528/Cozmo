@@ -126,7 +126,7 @@ you are looking for a tier-specific bug, it is almost certainly in the front hal
 .venv/bin/python -m pytest tests/ -q
 ```
 
-64 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
+68 tests. They cover geometry primitives, the ray-traced 3.60×2.80×2.50 box, thin-tier
 intervals, and the schema contract. Several exist because a defect got past review.
 
 ## State of the evidence

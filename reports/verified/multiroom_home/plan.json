@@ -3,7 +3,7 @@
   "pipeline_version": "0.1.0",
   "capture_id": "ae3edc814d",
   "tier": "lidar",
-  "created_at": "2026-09-13T06:23:58.711305Z",
+  "created_at": "2026-09-13T08:03:37.055933Z",
   "rooms": [
     {
       "room_id": "room_01",
@@ -2177,7 +2177,7 @@
     "residual_before_m": 0.3094513448255265,
     "residual_after_m": 0.2212484703340536,
     "max_pose_correction_m": 0.06546394809903143,
-    "footprint_area_before_m2": 0.0,
+    "footprint_area_before_m2": null,
     "footprint_area_after_m2": 16.567642937393725,
     "applied": true
   },
@@ -2190,13 +2190,13 @@
   },
   "quality": {
     "tier": "lidar",
-    "device_model": "unknown",
+    "device_model": "iPhone 17 Pro",
     "frames_available": 4378,
     "frames_used": 468,
     "median_depth_confidence": 0.014233704656362534,
     "surface_coverage": 1.0,
     "low_light_fraction": 0.0,
-    "specular_fraction": 0.0,
+    "specular_fraction": null,
     "warnings": [
       "snapped 27 wall runs onto the building frame, mean rotation 1.69 deg",
       "closed 0.398 m gap between room_03 and room_02 by translating room_02 onto the component anchored at room_01"
@@ -2210,5 +2210,5 @@
     "coverage": 0.9,
     "method": "prior_only"
   },
-  "runtime_seconds": 73.16791737501626
+  "runtime_seconds": 87.98196062500938
 }

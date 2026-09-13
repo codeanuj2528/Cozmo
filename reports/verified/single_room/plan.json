@@ -3,7 +3,7 @@
   "pipeline_version": "0.1.0",
   "capture_id": "c00a170fe1",
   "tier": "lidar",
-  "created_at": "2026-09-13T06:23:17.083394Z",
+  "created_at": "2026-09-13T08:07:08.148799Z",
   "rooms": [
     {
       "room_id": "room_01",
@@ -767,7 +767,7 @@
     "residual_before_m": 2.274584800422369,
     "residual_after_m": 0.3319082133523718,
     "max_pose_correction_m": 0.576895621606615,
-    "footprint_area_before_m2": 0.0,
+    "footprint_area_before_m2": null,
     "footprint_area_after_m2": 17.87242313240163,
     "applied": true
   },
@@ -786,7 +786,7 @@
     "median_depth_confidence": 0.0061121447943151,
     "surface_coverage": 0.48327526357302353,
     "low_light_fraction": 0.0,
-    "specular_fraction": 0.0,
+    "specular_fraction": null,
     "warnings": [
       "no strong downward-facing surface more than 2.20 m above the floor; ceiling height is unmeasured at this capture",
       "snapped 15 wall runs onto the building frame, mean rotation 1.83 deg"
@@ -800,5 +800,5 @@
     "coverage": 0.9,
     "method": "prior_only"
   },
-  "runtime_seconds": 31.563030624995008
+  "runtime_seconds": 42.79285266599618
 }

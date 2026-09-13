@@ -19,3 +19,5 @@ out/
 *.mp4
 *.ply
 *.bin
+# links into raw captures, recreated by the commands in reports/verified/one_room/SELECTION.md
+reports/verified/one_room/inputs/

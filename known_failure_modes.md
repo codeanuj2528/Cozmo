@@ -31,16 +31,16 @@ ones. The capture protocol now specifies the 1x lens.
 focal-to-scale correction against the LiDAR tier, which supplies depth ground truth on the
 same property for free.
 
-## 2. Opening detection cannot work at the photo tier
+## 2. Opening detection barely works at the photo tier
 
 **Status: structural, not a tuning problem.**
 
 Openings are found by looking for points *behind* a wall plane that a camera on the near side
-saw through. A single photograph's depth map is a 2.5D surface: there is nothing behind it,
-ever. The photo tier therefore detects zero openings, and because rooms are stitched by
-matching doorways, it also produces zero adjacency and cannot stitch.
+saw through. A single photograph's depth map is a 2.5D surface with little behind it. The 58
+stills at 0.5× detect no opening at all and the 12 of the hall at 1× detect one window, so the
+photo tier cannot join rooms at a doorway; it joins them by folder name, and the plan says so.
 
-The LiDAR tier finds 10 openings on the same flat.
+The LiDAR tier finds 7 openings on the same flat.
 
 Fixing this needs a different detector for the photo tier — appearance-based door detection,
 or a learned layout estimator — not a threshold change.
@@ -74,26 +74,25 @@ see-through test. Two defences:
 Residual risk: a large mirror facing a blank wall could still pass both tests. A floor-length
 mirror is the worst case and is untested.
 
-## 5. Drift correction can make a reconstruction worse
+## 5. A false loop closure can fold the map
 
 Loop closure on a wrongly matched pair folds the map. Guards: a candidate must be a genuine
 revisit (path walked at least 6× the distance closed), ICP must reach 0.55 fitness and
 0.035 m RMSE, and the pose graph uses a soft-L1 loss so one surviving false closure cannot
 dominate.
 
-The ablation is reported in the benchmark table for every capture. On `163f18d3ac` (96.6 m)
-the four-way ablation is, all four rows regenerable from the CLI:
+Every plan reports its loop closures, pose residuals and largest correction. On `163f18d3ac`
+(the 107 m long walk) the four-way ablation, regenerated at this commit:
 
-| variant | rooms | footprint | Manhattan compliance | room-frame dispersion |
-|---|---|---|---|---|
-| drift off, snap off | 6 | 21.16 m² | 0.527 | 0.95° |
-| drift off, snap on | 5 | 18.57 m² | 0.831 | 0.00° |
-| drift on, snap off | 6 | 27.97 m² | 0.575 | 4.91° |
-| drift on, snap on | 6 | 27.20 m² | 0.721 | 0.00° |
+| variant | rooms | footprint | loop closures |
+|---|---|---|---|
+| drift off, snap off | 5 | 20.25 m² | 0 |
+| drift off, snap on | 4 | 16.62 m² | 0 |
+| drift on, snap off | 5 | 25.77 m² | 110 |
+| drift on, snap on | 5 | 25.27 m² | 110 |
 
-These four rows are the **pre-merge** ablation (regenerable from CLI flags). After
-split-room merge the same capture is **5 rooms / 25.27 m²** (`reports/verified/README.md`).
-Do not quote 27.20 as the current plan.
+On this capture correction makes the plan better, not worse: with snapping on, the walk without
+it loses a room and a third of its footprint. The last row is the published plan.
 
 ## 6. A room the operator did not walk into is not reported
 
@@ -145,26 +144,27 @@ ratios of 0.50 and 0.56. Neither room is then measured on its own: the long walk
 +29% and its passage −22%, and the hall–passage connection is missed because the hall appears to
 open into the bathroom.
 
-## 13. The same bedroom differs by 0.3–0.6 m between walks
+## 13. The same bedroom differs by 0.3–1.2 m between walks
 
 The long walk reconstructs the bedroom at 2.58 × 2.08 m and the first walk at 2.89 × 2.68 m, against
 a taped 10 × 10 ft. The planes just outside the long walk's bedroom are the far faces of 230 mm brick
 partitions, not hidden walls, so the loss is not furniture standing in front of the walls. The
-cause is not yet found. Ceiling height on the same room repeats to 4 mm.
+cause is not yet found. Walked on its own (§19), its walls sit up to 1.21 m from the long walk's. The
+bedroom ceiling repeats to 4 mm between the two home walks, and the solo walk reads it 2.9 cm lower.
 
 ## 14. LiDAR intervals do not cover the tape
 
-0 of 16 and 0 of 15 measurements fall inside their intervals. The interval model includes sensor
+0 of 16, 0 of 15 and 0 of 5 measurements fall inside their intervals, on the long walk, the first
+walk and the solo bedroom walk. The interval model includes sensor
 noise, plane roughness and residual drift, and excludes segmentation error, which on this flat is
-tens of centimetres. No quantiles were fitted to widen them: with two walks of one flat, the rows
+tens of centimetres. No quantiles were fitted to widen them: with three walks of one flat, the rows
 used to fit would be the rows scored.
 
 ## 15. A tape in whole feet cannot adjudicate a 2 cm gate
 
 The operator recorded 16 × 10 ft, 10 × 10 ft and 11 × 2.5 ft. A reading rounded to the foot carries
-±15 cm, so the wall-length gate at 2 cm is unscorable against it in either direction. The benchmark
-reports whether each room agrees with the tape to the tape's own precision beside the gate, without
-using that to soften the gate.
+±15 cm, so the wall-length gate at 2 cm is unscorable against it in either direction. The gate is
+scored as written and is not softened for the tape's precision.
 
 ## 16. Damage on a damage-free flat
 
@@ -207,3 +207,6 @@ reconstruct as 7 rooms and 35.74 m² and as 6 rooms and 31.57 m², 13% apart. Ne
 neither can be called right. Both plans also close the gaps between declared neighbours by moving
 whole rooms, by up to 1.73 m, which says those rooms were not reconstructed touching in the first
 place; `quality.warnings` in each plan lists every move.
+
+Each plan now names every declared connection it draws more than 0.30 m apart: two on the
+with-ceiling scan, at 1.52 m and 3.84 m, and one on the 0.5× photo set, at 0.84 m.

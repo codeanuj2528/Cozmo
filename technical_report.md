@@ -1,7 +1,7 @@
 # Cozmo — technical report
 
 Handheld iPhone capture to a dimensioned floor plan, damage map and repair scope, at three
-input tiers. Six pages, as specified; the page cap is why this omits things that went well
+input tiers. At most six pages, as specified; the page cap is why this omits things that went well
 and spends its space on the decisions and the numbers.
 
 ---
@@ -74,17 +74,19 @@ cross-correlation, then ICP. That order matters: ICP has a small basin of conver
 fails from the identity, and two photographs from opposite corners of a room often share
 almost no texture but always share the room's shape.
 
-Measured accuracy is not tabulated here because the laser ground truth for the benchmark
-property has not been recorded. `capture/DEVICE_MATRIX.md` carries those cells marked
-`pending`, filled by `cozmo benchmark` and never by hand.
+Measured against the operator's tape, which is recorded in whole feet, LiDAR walls come out at a
+median error of 0.81 m (26%) over 28 walls and photo walls at 2.08 m (75%) over 12. Errors that
+size are segmentation, merged and short rooms, not sensor noise, which §4 puts under a
+centimetre. `capture/DEVICE_MATRIX.md` holds every cell, produced by `scripts/accuracy_table.py`
+and the gate table rather than written by hand.
 
 ---
 
 ## 3. Drift
 
 The brief makes "poses used as-is" an automatic fail, and it is right to. ARKit's odometry is
-locally excellent and globally not: over a 96.6 m walk the loop does not close, the corridor
-comes out long, and the last room lands centimetres from the first.
+locally excellent and globally not: on the long walk, 107 m of odometry over 312 s, the pose
+graph built from its 110 verified revisits starts with a 0.709 m residual.
 
 Correction is a pose graph over keyframes: odometry edges at the reported relative pose,
 loop-closure edges at the pose ICP measured. **Loop candidates are proposed by geometry and
@@ -92,7 +94,8 @@ confirmed by ICP, never the reverse.** A candidate must be a genuine revisit —
 least 6× the distance closed, and at least 6 m. Without that test a slow walk down a corridor
 generates a constraint between every pair of keyframes in it, all merely restating odometry
 with ICP noise added; that mistake produced 114 "closures" and made the map worse. With it,
-41 survive on the sample apartment and 110 on the author's flat.
+41 survive on the assignment's scan with ceiling, 19 on its floor-only scan and 110 on the
+author's long walk.
 
 Rotation and translation residuals are weighted by separate information terms. A pose graph
 that adds radians to metres is weighting one arbitrarily against the other, and over 100 m a
@@ -104,20 +107,22 @@ Drift alone does not remove residual yaw, so walls within 6° of the building fr
 rotated onto it and their offsets refit from their own points — the plane-anchored half.
 Only the direction comes from the prior; the position stays measured.
 
-**Ablation, `163f18d3ac`, 96.6 m walk, six segmented spaces.** All four rows regenerate
-from the CLI; the `snap off` rows need `--no-snap-walls`, which exists for this reason:
+**Ablation, `163f18d3ac`, the 107 m long walk.** All four rows regenerate at this commit from
+`--no-drift-correction` and `--no-snap-walls`; the last row is the published plan.
 
-| variant | rooms | footprint | Manhattan compliance | room-frame dispersion |
-|---|---|---|---|---|
-| drift off, snap off | 6 | 21.16 m² | 0.527 | 0.95° |
-| drift off, snap on | 5 | 18.57 m² | 0.831 | 0.00° |
-| drift on, snap off | 6 | 27.97 m² | 0.575 | 4.91° |
-| **drift on, snap on** | **6** | **27.20 m²** | **0.721** | **0.00°** |
+| variant | rooms | footprint | against tape, 28.75 m² | loop closures | pose residual | max correction |
+|---|---|---|---|---|---|---|
+| drift off, snap off | 5 | 20.25 m² | −30% | 0 | not applied | — |
+| drift off, snap on | 4 | 16.62 m² | −42% | 0 | not applied | — |
+| drift on, snap off | 5 | 25.77 m² | −10% | 110 | 0.709 → 0.583 m | 19.0 cm |
+| **drift on, snap on** | **5** | **25.27 m²** | **−12%** | **110** | **0.709 → 0.583 m** | **19.0 cm** |
 
-Manhattan compliance is the fraction of wall length within 2° of the dominant building frame;
-room-frame dispersion is the spread of per-room frames, which is where yaw drift shows up and
-nowhere else. Both are unsupervised — they adjudicate between pipeline versions on a capture
-nobody has measured, and they do not replace the tape.
+Correction is what matters: with snapping on, poses used as-is lose a room and a third of the
+footprint, and correction recovers both. Snapping does not improve area on this walk. It costs
+0.5 m² against the tape with correction, and 3.6 m² and a room without it. It stays on as the
+plane-anchored half of the correction: the 18 wall runs it rotates sat 1.80° off the building
+frame on average, which is yaw error if the flat's walls are square, and 0.5 m² is small next to
+the 8.7 m² between the two walks of this flat.
 
 ---
 
@@ -127,8 +132,8 @@ nobody has measured, and they do not replace the tape.
 
 | term | magnitude | handling |
 |---|---|---|
-| Residual gravity tilt | 0.46° on one sample → 4 cm over a 5 m room | Gravity refit to the observed floor before anything else runs |
-| Yaw drift across rooms | 4.91° dispersion uncorrected | Pose graph + frame snapping → 0.00° |
+| Residual gravity tilt | not recorded in the plans; 1° tips the far end of a 5 m room by 8.7 cm | Gravity refit to the observed floor plane; a fitted tilt above 6° is not applied and is warned |
+| Yaw drift across rooms | on the long walk 110 closures cut the pose residual from 0.709 to 0.583 m; the 18 wall runs snapped afterwards sat 1.80° off the building frame on average | Pose graph, then walls within 6° snapped onto the frame |
 | Depth noise | 8 mm base, +2.5 mm/m² range term | Inverse-variance weighting; plane σ from the larger of model and residual scatter |
 | Plane offset | 0.1–0.4 mm on well-observed walls | Propagated into wall length as √2 × σ per corner |
 | Voxel quantisation | 20 mm pitch | Positions averaged within voxel, not snapped |
@@ -169,9 +174,10 @@ those flowed into every measurement in every plan and made the one field a reade
 tell a calibrated interval from a guess into a falsehood. It now fits from residuals or
 writes nothing and says why.
 
-No quantiles are fitted at present, because fitting them needs laser ground truth and none
-has been recorded. Every interval in every current plan reports `propagated` or `prior`,
-truthfully.
+No quantiles are applied to the published plans. The tape makes fitting possible, and
+`cozmo calibrate` fits a relative wall-length quantile of 0.60 for LiDAR from 28 residuals, but
+those are the rows the benchmark scores, so applying it would grade the intervals on their own
+training data. Every interval in every current plan reports `propagated` or `prior`, truthfully.
 
 ---
 
@@ -221,17 +227,19 @@ walk's bedroom as the hall. Rooms are now named from camera frames. No gate move
 
 ## 7. Known failure modes
 
-Ten are documented with measurements in `known_failure_modes.md`. The four that matter:
+Twenty are documented with measurements in `known_failure_modes.md`. The four that matter:
 
 **The photo tier does not meet its gates.** §4 and §6 above. What would fix it, in order:
-capture at 1x rather than 0.5x — free, and the protocol now says so; fit the focal-to-scale
-correction against the LiDAR tier, which supplies depth ground truth on the same property for
-nothing; require two floor-visible photographs per room.
+capture at 1× rather than 0.5×, which the protocol now requires, though the hall re-shot at 1×
+still reads 136% too large; fit the focal-to-scale correction against the LiDAR tier, which
+supplies depth ground truth on the same property for nothing; require two floor-visible
+photographs per room.
 
-**Opening detection cannot work at the photo tier, structurally.** Openings are found by
-looking for points behind a wall plane that a camera on the near side saw through. A single
-photograph's depth map is a 2.5D surface with nothing behind it, ever. Zero openings means no
-doorways to match, which means no stitch. This needs a different detector, not a threshold.
+**Opening detection barely works at the photo tier.** Openings are found by looking for points
+behind a wall plane that a camera on the near side saw through, and a single photograph's depth
+map is a 2.5D surface with little behind it. The 58 stills at 0.5× found no opening and the 12 at
+1× found one window, so rooms stitch by folder name rather than by doorway. This needs a
+different detector, not a threshold.
 
 **Mirrors, glass and wet-look surfaces** get two defences. A geometric mirror test reflects
 suspect points back across the wall plane and asks whether they land on the room in front of
@@ -257,13 +265,13 @@ failure modes rather than shipped.
 
 The LiDAR tier is the one to run at a walk-in. On the home flat walked with the ceiling lap and a
 closed loop (`163f18d3ac`) it returns 5 rooms and 25.27 m² against a taped 28.75 m² (−12%), with
-per-room ceilings of 2.56–2.68 m, 7 openings and 3 of 4 taped connections. The hall matches the
-tape to its own precision, 15.8 × 9.6 ft against 16 × 10 ft. The bedroom does not: 5.28 m²
-against 9.29 m², and a second walk of the same room gives 7.03 m², so the defect is in the
+per-room ceilings of 2.56–2.68 m, 7 openings and 3 of 4 taped connections. The hall comes
+closest, 13.18 m² against 14.86 m² (−11%). The bedroom is furthest, 5.28 m² against 9.29 m²
+(−43%), and a second walk of the same room gives 7.03 m², so the defect is in the
 reconstruction, not in the tape.
 
 Against the tape the gates read 13 PASS, 19 FAIL, 34 SKIP. Ceiling and opening gates are SKIP
-because neither was taped. LiDAR intervals cover the tape on none of 31 measurements: they model
+because neither was taped. LiDAR intervals cover the tape on none of 36 measurements: they model
 sensor and drift error, not a merged or a short room. The photo tier fails at +220% and the video
 tier does not produce a metric plan. Walked alone, the bedroom reads 7.81 m² against 9.29 m²;
 photographed on the 1× lens, the hall reads 35.12 m² against 14.86 m², down from a rejected 71.8 m²
