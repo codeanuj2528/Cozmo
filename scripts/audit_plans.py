@@ -114,7 +114,7 @@ def audit_plan(path: Path) -> dict:
                     f"{rid}: floor_area {reported_area:.2f} m2 but its polygon encloses "
                     f"{shoelace:.2f} m2 ({abs(shoelace - reported_area) / reported_area * 100:.0f}% apart)"
                 )
-                        reason = invalid_reason(poly) if len(poly) >= 3 else None
+            reason = invalid_reason(poly) if len(poly) >= 3 else None
             if reason:
                 selfint += 1
                 findings.append(f"{rid}: floor outline is not a valid polygon ({reason})")
