@@ -12,12 +12,38 @@ from typing import Dict, Iterator, List, Optional
 import cv2
 import numpy as np
 
-from cozmo.io.discover import IMAGE_EXTENSIONS, find_images, read_image
+from cozmo.io.discover import IMAGE_EXTENSIONS, ensure_heif_support, find_images, read_image
 from cozmo.io.base import CaptureMeta, CaptureSource, Frame, Provenance
 from cozmo.schema import Tier
 from cozmo.util.transforms import scale_intrinsics
 
 log = logging.getLogger("cozmo.io.photo")
+
+EXIF_MODEL_TAG = 0x0110
+
+
+def device_model_from_exif(images: List[Path]) -> str:
+    """The camera model the photographs record in IFD0, or "unknown".
+
+    This tier used to default to "iPhone 15" whatever took the pictures. The benchmark
+    photographs are tagged iPhone 17 Pro, so every photo-tier plan named the wrong device.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return "unknown"
+    for path in images:
+        if path.suffix.lower() in (".heic", ".heif") and not ensure_heif_support():
+            continue
+        try:
+            with Image.open(path) as image:
+                model = image.getexif().get(EXIF_MODEL_TAG)
+        except Exception as exc:
+            log.debug("EXIF unreadable for %s: %s", path, exc)
+            continue
+        if isinstance(model, str) and model.strip("\x00 "):
+            return model.strip("\x00 ")
+    return "unknown"
 
 
 class PhotoCapture(CaptureSource):
@@ -27,7 +53,7 @@ class PhotoCapture(CaptureSource):
         self,
         root: Path,
         capture_id: Optional[str] = None,
-        device_model: str = "iPhone 15",
+        device_model: Optional[str] = None,
     ) -> None:
         self.root = Path(root)
         self.room_folders: Dict[str, List[Path]] = {}
@@ -62,7 +88,8 @@ class PhotoCapture(CaptureSource):
         self.meta = CaptureMeta(
             capture_id=capture_id or self.root.name,
             tier=Tier.PHOTO,
-            device_model=device_model,
+            device_model=device_model
+            or device_model_from_exif([p for imgs in self.room_folders.values() for p in imgs]),
             root=self.root,
             frame_count=total_images,
             groups=sorted(list(self.room_folders.keys())),

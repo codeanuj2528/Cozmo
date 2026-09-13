@@ -16,6 +16,7 @@ globally to get a floor reference, then per room for per-room ceiling gates.
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 import logging
 import time
@@ -171,9 +172,22 @@ def _quality_report(
 
 
 def _hash_input(input_dir: Path) -> str:
-    """Deterministic hash of the capture directory for provenance."""
+    """Deterministic hash of the capture directory for provenance: file names and sizes.
+
+    Symlinked folders are followed. `Path.rglob` does not follow them, so a photo set linked
+    into a run directory hashed as the empty string and the manifest identified no input.
+    """
     h = hashlib.sha256()
-    for p in sorted(input_dir.rglob("*")):
+    files: list[Path] = []
+    seen: set[str] = set()
+    for root, dirs, names in os.walk(input_dir, followlinks=True):
+        real = os.path.realpath(root)
+        if real in seen:
+            dirs[:] = []
+            continue
+        seen.add(real)
+        files.extend(Path(root) / name for name in names)
+    for p in sorted(files):
         if p.is_file() and p.stat().st_size < 50_000_000:
             h.update(p.name.encode())
             h.update(str(p.stat().st_size).encode())
@@ -181,7 +195,11 @@ def _hash_input(input_dir: Path) -> str:
 
 
 def _git_commit() -> str:
-    """Current git short hash, or 'unknown' outside a repo."""
+    """Current git short hash, "-dirty" appended when the pipeline source differs from it.
+
+    Without the suffix, a plan regenerated from uncommitted code carries the hash of a commit
+    that cannot reproduce it.
+    """
     try:
         import subprocess
 
@@ -191,7 +209,16 @@ def _git_commit() -> str:
             text=True,
             timeout=5,
         )
-        return result.stdout.strip() or "unknown"
+        commit = result.stdout.strip()
+        if not commit:
+            return "unknown"
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no", "--", str(Path(__file__).resolve().parents[1])],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return f"{commit}-dirty" if status.stdout.strip() else commit
     except Exception:
         return "unknown"
 

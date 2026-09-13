@@ -30,7 +30,7 @@ class VideoCapture(CaptureSource):
         self,
         video_path: Path,
         capture_id: Optional[str] = None,
-        device_model: str = "iPhone 15",
+        device_model: str = "unknown",
         stride: int = DEFAULT_STRIDE_FRAMES,
         blur_threshold: float = DEFAULT_BLUR_THRESHOLD,
         max_frames: int = DEFAULT_MAX_FRAMES,
